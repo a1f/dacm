@@ -1,0 +1,29 @@
+{
+  "productName": "DACM",
+  "version": "0.1.0",
+  "identifier": "com.dacm.desktop",
+  "build": {
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../view/dist",
+    "beforeDevCommand": {
+      "script": "npm run dev",
+      "cwd": "../view"
+    },
+    "beforeBuildCommand": {
+      "script": "npm run build",
+      "cwd": "../view"
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "DACM",
+        "width": 800,
+        "height": 600
+      }
+    ]
+  },
+  "bundle": {
+    "active": true
+  }
+}
