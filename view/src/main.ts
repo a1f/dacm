@@ -1,105 +1,147 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { renderSidebar } from "./sidebar.ts";
+import { renderTaskDetail } from "./task-detail.ts";
+import type { Project, Task, TaskStatus, TaskStatusChangedEvent } from "./types.ts";
 import "./style.css";
 
-interface Project {
-  id: number;
-  name: string;
-  path: string;
-  created_at: string;
+interface AppState {
+  projects: Project[];
+  tasks: Task[];
+  selectedTaskId: number | null;
 }
+
+const state: AppState = {
+  projects: [],
+  tasks: [],
+  selectedTaskId: null,
+};
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
-
 app.innerHTML = `
-  <h1>DACM</h1>
-  <div class="toolbar">
-    <button id="add-project">Add Project Folder</button>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main-content" id="main-content"></main>
   </div>
-  <div id="project-list"></div>
-  <p id="status"></p>
 `;
 
-const projectList = document.querySelector<HTMLDivElement>("#project-list")!;
-const status = document.querySelector<HTMLParagraphElement>("#status")!;
+const sidebarEl = document.querySelector<HTMLElement>("#sidebar")!;
+const mainContentEl = document.querySelector<HTMLElement>("#main-content")!;
 
-function showStatus(message: string, isError = false) {
-  status.textContent = message;
-  status.className = isError ? "error" : "";
+function getSelectedTask(): Task | null {
+  if (state.selectedTaskId === null) return null;
+  return state.tasks.find((t) => t.id === state.selectedTaskId) ?? null;
 }
 
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
+function render() {
+  renderSidebar(sidebarEl, state.projects, state.tasks, state.selectedTaskId, {
+    onTaskSelect(taskId: number) {
+      state.selectedTaskId = taskId;
+      render();
+    },
+    async onQuickTask(projectId: number, name: string) {
+      try {
+        const task = await invoke<Task>("create_task", { projectId, name });
+        state.tasks.push(task);
+        state.selectedTaskId = task.id;
+        render();
+      } catch (e) {
+        console.error("Failed to create task:", e);
+      }
+    },
+    async onAddProject() {
+      try {
+        const selected = await open({ directory: true, multiple: false });
+        if (!selected) return;
+        await invoke("add_project", { path: selected });
+        await refresh();
+      } catch (e) {
+        console.error("Failed to add project:", e);
+      }
+    },
+    async onRemoveProject(projectId: number) {
+      try {
+        await invoke("remove_project", { id: projectId });
+        // Remove tasks belonging to this project from local state
+        state.tasks = state.tasks.filter((t) => t.project_id !== projectId);
+        if (state.selectedTaskId !== null) {
+          const selected = state.tasks.find((t) => t.id === state.selectedTaskId);
+          if (!selected) state.selectedTaskId = null;
+        }
+        await refresh();
+      } catch (e) {
+        console.error("Failed to remove project:", e);
+      }
+    },
+  });
+
+  renderTaskDetail(mainContentEl, getSelectedTask(), state.projects, {
+    async onStatusChange(taskId: number, status: TaskStatus) {
+      try {
+        const updated = await invoke<Task>("update_task_status", { taskId, status });
+        state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+        render();
+      } catch (e) {
+        console.error("Failed to update status:", e);
+      }
+    },
+    async onSimulate(taskId: number) {
+      try {
+        await invoke("simulate_task", { taskId });
+      } catch (e) {
+        console.error("Failed to start simulation:", e);
+      }
+    },
+    async onArchive(taskId: number) {
+      try {
+        await invoke<Task>("archive_task", { taskId });
+        state.tasks = state.tasks.filter((t) => t.id !== taskId);
+        if (state.selectedTaskId === taskId) {
+          state.selectedTaskId = null;
+        }
+        render();
+      } catch (e) {
+        console.error("Failed to archive task:", e);
+      }
+    },
+    async onNewTask(projectId: number, name: string, description: string) {
+      try {
+        const task = await invoke<Task>("create_task", {
+          projectId,
+          name,
+          description: description || null,
+        });
+        state.tasks.push(task);
+        state.selectedTaskId = task.id;
+        render();
+      } catch (e) {
+        console.error("Failed to create task:", e);
+      }
+    },
+  });
 }
 
-function renderProjects(projects: Project[]) {
-  if (projects.length === 0) {
-    projectList.innerHTML = `<p class="empty">No projects yet. Click "Add Project Folder" to get started.</p>`;
-    return;
-  }
-
-  projectList.innerHTML = projects
-    .map(
-      (p) => `
-    <div class="project-row" data-id="${p.id}">
-      <div class="project-info">
-        <span class="project-name">${escapeHtml(p.name)}</span>
-        <span class="project-path">${escapeHtml(p.path)}</span>
-      </div>
-      <button class="delete-btn" data-id="${p.id}">Remove</button>
-    </div>
-  `
-    )
-    .join("");
-}
-
-async function loadProjects() {
+async function refresh() {
   try {
-    const projects = await invoke<Project[]>("list_projects");
-    renderProjects(projects);
+    const [projects, tasks] = await Promise.all([
+      invoke<Project[]>("list_projects"),
+      invoke<Task[]>("list_all_tasks"),
+    ]);
+    state.projects = projects;
+    state.tasks = tasks;
+    render();
   } catch (e) {
-    showStatus(`Failed to load projects: ${e}`, true);
+    console.error("Failed to load data:", e);
   }
 }
 
-async function addProject() {
-  try {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Select Project Folder",
-    });
-
-    if (!selected) return;
-
-    const project = await invoke<Project>("add_project", { path: selected });
-    showStatus(`Added "${project.name}"`);
-    await loadProjects();
-  } catch (e) {
-    showStatus(`Failed to add project: ${e}`, true);
-  }
-}
-
-async function removeProject(id: number) {
-  try {
-    await invoke("remove_project", { id });
-    showStatus("Project removed");
-    await loadProjects();
-  } catch (e) {
-    showStatus(`Failed to remove project: ${e}`, true);
-  }
-}
-
-document.querySelector("#add-project")!.addEventListener("click", addProject);
-
-projectList.addEventListener("click", (e) => {
-  const target = e.target as HTMLElement;
-  if (target.classList.contains("delete-btn")) {
-    const id = Number(target.dataset.id);
-    removeProject(id);
-  }
+listen<TaskStatusChangedEvent>("task-status-changed", (event) => {
+  const { task_id, status } = event.payload;
+  state.tasks = state.tasks.map((t) =>
+    t.id === task_id ? { ...t, status } : t,
+  );
+  render();
 });
 
-loadProjects();
+refresh();
