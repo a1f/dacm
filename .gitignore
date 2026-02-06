@@ -26,3 +26,9 @@ view/dist/
 
 # App logs
 dacm_events.log
+
+# Tauri generated schemas
+core/gen/
+
+# Dev mocks
+view/mocks/
