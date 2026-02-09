@@ -4,13 +4,15 @@ mod commands;
 mod db;
 mod models;
 mod schema;
+mod session;
+mod session_commands;
 mod task_commands;
 mod task_models;
 
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
 fn main() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_data_dir = app
@@ -22,6 +24,7 @@ fn main() {
                 db::init_db(&app_data_dir).expect("failed to initialize database");
 
             app.manage(db_state);
+            app.manage(session::SessionManager::new());
 
             Ok(())
         })
@@ -35,7 +38,20 @@ fn main() {
             task_commands::list_tasks_by_project,
             task_commands::list_all_tasks,
             task_commands::simulate_task,
+            session_commands::spawn_session,
+            session_commands::write_to_session,
+            session_commands::resize_session,
+            session_commands::kill_session,
+            session_commands::list_sessions,
+            session_commands::start_session_stream,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let RunEvent::ExitRequested { .. } = event {
+            let session_mgr = app_handle.state::<session::SessionManager>();
+            session_mgr.kill_all();
+        }
+    });
 }
