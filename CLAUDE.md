@@ -30,7 +30,9 @@ dacm/
 │   ├── src/
 │   │   ├── main.ts         # App state management & orchestration
 │   │   ├── sidebar.ts      # Sidebar UI (project groups, task list)
-│   │   ├── task-detail.ts  # Task detail panel & new task form
+│   │   ├── task-detail.ts  # Task detail panel, terminal mode & new task form
+│   │   ├── terminal.ts     # xterm.js wrapper + Tauri event bridge
+│   │   ├── debug-panel.ts  # Debug view for active sessions (Ctrl+Shift+D)
 │   │   ├── types.ts        # TypeScript type definitions
 │   │   └── style.css       # Dark-themed CSS with animations
 │   ├── package.json        # Node dependencies & scripts
@@ -90,9 +92,12 @@ cd view && npx tsc --noEmit
 
 - **No framework**: Vanilla TypeScript with direct DOM manipulation
 - **IPC**: Uses `@tauri-apps/api` (`invoke` for commands, `listen` for events)
+- **Terminal**: xterm.js (`@xterm/xterm` + `@xterm/addon-fit`) renders PTY output; `terminal.ts` bridges xterm events to Tauri session commands
+- **Terminal lifecycle**: `task-detail.ts` tracks a module-level `activeTerminal` and skips re-render when the session hasn't changed (preserves terminal state across sidebar interactions)
 - **XSS protection**: All user-supplied text rendered via `escapeHtml()` helper
 - **Event delegation**: Used for dynamically created elements (task lists, status buttons)
 - **Module structure**: Each file exports render/update functions consumed by `main.ts`
+- **Debug mode**: `Ctrl+Shift+D` toggles a debug panel showing all active sessions with kill buttons
 
 ### Database
 
@@ -125,6 +130,8 @@ cd view && npx tsc --noEmit
 | `core/src/schema.rs` | Auto-generated — never edit manually |
 | `core/tauri.conf.json` | App identity, build commands, window config |
 | `core/capabilities/default.json` | Tauri security permissions |
+| `view/src/terminal.ts` | xterm.js wrapper — bridges PTY events to/from frontend |
+| `view/src/task-detail.ts` | Terminal mode (active session) vs static detail view |
 | `view/src/types.ts` | Shared TypeScript interfaces (must match Rust models) |
 | `docs/PRODUCT_SPEC.md` | Product vision and feature roadmap |
 

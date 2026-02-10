@@ -66,7 +66,7 @@ Data flow: PTY reader -> background thread -> `app_handle.emit()` -> frontend `l
 
 ---
 
-## Step 3: Frontend xterm.js Integration
+## Step 3: Frontend xterm.js Integration ✅ COMPLETED
 
 **New file: `view/src/terminal.ts`**
 
@@ -88,7 +88,7 @@ Data flow: PTY reader -> background thread -> `app_handle.emit()` -> frontend `l
 
 ---
 
-## Step 4: Task Creation Spawns Claude
+## Step 4: Task Creation Spawns Claude ✅ COMPLETED
 
 **Modify: `view/src/main.ts`**
 - Add `activeSessions: Map<number, string>` to `AppState` (taskId -> sessionId)
@@ -110,7 +110,7 @@ Data flow: PTY reader -> background thread -> `app_handle.emit()` -> frontend `l
 
 ---
 
-## Step 5: Debug View
+## Step 5: Debug View ✅ COMPLETED
 
 **New file: `view/src/debug-panel.ts`**
 

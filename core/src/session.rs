@@ -74,7 +74,6 @@ impl SessionManager {
             cmd.arg(prompt);
         }
 
-        // Ensure Claude sees a real terminal
         cmd.env("TERM", "xterm-256color");
 
         let child = pair
@@ -107,7 +106,6 @@ impl SessionManager {
         let mut sessions = self.sessions.lock().map_err(|e| e.to_string())?;
         sessions.insert(session_id.clone(), handle);
 
-        // Drop the slave — the child process owns it now
         drop(pair.slave);
 
         Ok(session_id)
@@ -199,7 +197,7 @@ impl SessionManager {
         }
     }
 
-    #[allow(dead_code)] // Will be used by frontend cleanup
+    #[allow(dead_code)]
     pub fn remove(&self, session_id: &str) -> Result<(), String> {
         let mut sessions = self.sessions.lock().map_err(|e| e.to_string())?;
         sessions

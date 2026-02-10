@@ -98,7 +98,6 @@ fn stream_pty_output(
         }
     }
 
-    // Mark session as exited
     let session_mgr = app_handle.state::<SessionManager>();
     session_mgr.mark_exited(session_id);
 
