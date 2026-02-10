@@ -3,9 +3,9 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { renderSidebar } from "./sidebar.ts";
 import { renderTaskDetail, destroyActiveTerminal, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
-import { clearStream } from "./terminal.ts";
+import { clearStream, markStreamStarted } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
-import type { Project, Task, TaskStatus, TaskStatusChangedEvent } from "./types.ts";
+import type { Project, Task, TaskStatus, TaskStatusChangedEvent, SessionInfo } from "./types.ts";
 import "./style.css";
 
 interface AppState {
@@ -160,8 +160,13 @@ function render() {
   if (state.debugMode) {
     mainContentEl.classList.remove("terminal-mode");
     detachActiveTerminal(mainContentEl);
-    renderDebugPanel(mainContentEl, {
+    renderDebugPanel(mainContentEl, state.tasks, {
       onClose() {
+        state.debugMode = false;
+        render();
+      },
+      onGoToTask(taskId: number) {
+        state.selectedTaskId = taskId;
         state.debugMode = false;
         render();
       },
@@ -171,7 +176,6 @@ function render() {
         } catch (e) {
           console.error("Failed to kill session:", e);
         }
-        // Remove from activeSessions map
         for (const [taskId, sid] of state.activeSessions) {
           if (sid === sessionId) {
             state.activeSessions.delete(taskId);
@@ -242,12 +246,19 @@ function render() {
 
 async function refresh() {
   try {
-    const [projects, tasks] = await Promise.all([
+    const [projects, tasks, sessions] = await Promise.all([
       invoke<Project[]>("list_projects"),
       invoke<Task[]>("list_all_tasks"),
+      invoke<SessionInfo[]>("list_sessions"),
     ]);
     state.projects = projects;
     state.tasks = tasks;
+    for (const s of sessions) {
+      if (s.status === "running" && !state.activeSessions.has(s.task_id)) {
+        state.activeSessions.set(s.task_id, s.session_id);
+        markStreamStarted(s.session_id);
+      }
+    }
     render();
   } catch (e) {
     console.error("Failed to load data:", e);

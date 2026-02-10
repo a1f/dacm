@@ -576,12 +576,25 @@ body {
   white-space: nowrap;
 }
 
+.btn-goto-debug,
 .btn-kill-debug {
   padding: 0.2rem 0.5rem;
   font-size: 0.7rem;
+  background: transparent;
+}
+
+.btn-goto-debug {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-goto-debug:hover {
+  background: rgba(36, 200, 219, 0.15);
+}
+
+.btn-kill-debug {
   border-color: var(--red);
   color: var(--red);
-  background: transparent;
 }
 
 .btn-kill-debug:hover:not(:disabled) {

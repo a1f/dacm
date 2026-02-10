@@ -11,6 +11,7 @@ pub struct SessionHandle {
     pub working_dir: String,
     pub pid: Option<u32>,
     pub started_at: std::time::Instant,
+    pub started_at_epoch: u64,
     pub status: SessionStatus,
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
@@ -31,6 +32,7 @@ pub struct SessionInfo {
     pub project_id: i32,
     pub pid: Option<u32>,
     pub uptime_secs: u64,
+    pub started_at_epoch: u64,
     pub status: String,
     pub working_dir: String,
 }
@@ -96,6 +98,10 @@ impl SessionManager {
             working_dir,
             pid,
             started_at: std::time::Instant::now(),
+            started_at_epoch: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
             status: SessionStatus::Running,
             master: pair.master,
             writer,
@@ -216,6 +222,7 @@ impl SessionManager {
                 project_id: handle.project_id,
                 pid: handle.pid,
                 uptime_secs: handle.started_at.elapsed().as_secs(),
+                started_at_epoch: handle.started_at_epoch,
                 status: match handle.status {
                     SessionStatus::Running => "running".to_string(),
                     SessionStatus::Exited => "exited".to_string(),

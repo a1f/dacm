@@ -35,6 +35,7 @@ export interface SessionInfo {
   project_id: number;
   pid: number | null;
   uptime_secs: number;
+  started_at_epoch: number;
   status: SessionStatus;
   working_dir: string;
 }
