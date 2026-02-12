@@ -5,6 +5,7 @@ import { renderSidebar } from "./sidebar.ts";
 import { renderTaskDetail, destroyActiveTerminal, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
 import { clearStream, markStreamStarted } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
+import { initTheme } from "./theme.ts";
 import type { Project, Task, TaskStatus, TaskStatusChangedEvent, SessionInfo } from "./types.ts";
 import "./style.css";
 
@@ -282,4 +283,4 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-refresh();
+initTheme().then(() => refresh());

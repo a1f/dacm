@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { getTerminalTheme } from "./theme.ts";
 import "@xterm/xterm/css/xterm.css";
 
 export interface TerminalSession {
@@ -13,6 +14,16 @@ export interface TerminalSession {
 
 // Sessions whose PTY stream has already been started (reader taken)
 const startedStreams = new Set<string>();
+
+// Track live terminals for theme updates
+const activeTerminals = new Set<Terminal>();
+
+window.addEventListener("dacm-theme-changed", () => {
+  const theme = getTerminalTheme();
+  for (const t of activeTerminals) {
+    t.options.theme = theme;
+  }
+});
 
 export function markStreamStarted(sessionId: string): void {
   startedStreams.add(sessionId);
@@ -34,34 +45,14 @@ export async function createTerminalSession(
     fontSize: 13,
     lineHeight: 1.2,
     scrollback: 100_000,
-    theme: {
-      background: "#1a1a2e",
-      foreground: "#e0e0e0",
-      cursor: "#24c8db",
-      selectionBackground: "rgba(36, 200, 219, 0.3)",
-      black: "#1a1a2e",
-      red: "#e53e3e",
-      green: "#48bb78",
-      yellow: "#ed8936",
-      blue: "#24c8db",
-      magenta: "#b794f6",
-      cyan: "#76e4f7",
-      white: "#e0e0e0",
-      brightBlack: "#555",
-      brightRed: "#fc8181",
-      brightGreen: "#68d391",
-      brightYellow: "#fbd38d",
-      brightBlue: "#63b3ed",
-      brightMagenta: "#d6bcfa",
-      brightCyan: "#9decf9",
-      brightWhite: "#ffffff",
-    },
+    theme: getTerminalTheme(),
   });
 
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   terminal.open(container);
   fitAddon.fit();
+  activeTerminals.add(terminal);
 
   const decoder = new TextDecoder("utf-8", { fatal: false });
 
@@ -130,6 +121,7 @@ export async function createTerminalSession(
     onDataDisposable.dispose();
     onResizeDisposable.dispose();
     resizeObserver.disconnect();
+    activeTerminals.delete(terminal);
     terminal.dispose();
   }
 
