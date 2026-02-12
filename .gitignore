@@ -30,5 +30,6 @@ dacm_events.log
 # Tauri generated schemas
 core/gen/
 
-# Dev mocks
-view/mocks/
+# Playwright artifacts
+.playwright-mcp/
+view/test-results/
