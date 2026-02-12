@@ -6,6 +6,8 @@ mod models;
 mod schema;
 mod session;
 mod session_commands;
+mod settings_commands;
+mod settings_models;
 mod task_commands;
 mod task_models;
 
@@ -44,6 +46,9 @@ fn main() {
             session_commands::kill_session,
             session_commands::list_sessions,
             session_commands::start_session_stream,
+            settings_commands::get_setting,
+            settings_commands::set_setting,
+            settings_commands::list_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

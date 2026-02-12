@@ -29,6 +29,13 @@ export interface TaskStatusChangedEvent {
 
 export type SessionStatus = "running" | "exited";
 
+export interface Setting {
+  key: string;
+  value: string;
+}
+
+export type ThemeMode = "light" | "dark" | "system";
+
 export interface SessionInfo {
   session_id: string;
   task_id: number;

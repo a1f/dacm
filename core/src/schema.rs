@@ -10,6 +10,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    settings (key) {
+        key -> Text,
+        value -> Text,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     tasks (id) {
         id -> Integer,
         name -> Text,
@@ -27,4 +35,5 @@ diesel::table! {
 }
 
 diesel::joinable!(tasks -> projects (project_id));
-diesel::allow_tables_to_appear_in_same_query!(projects, tasks);
+
+diesel::allow_tables_to_appear_in_same_query!(projects, settings, tasks,);
