@@ -6,8 +6,12 @@ import { renderStartPage } from "./start-page.ts";
 import { renderTaskDetail, destroyActiveTerminal, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
 import { clearStream, markStreamStarted } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
+import { renderSettingsNav } from "./settings-nav.ts";
+import { renderGeneralSettings } from "./settings-general.ts";
+import { renderWorktreeSettings } from "./settings-worktrees.ts";
+import { renderArchivedSettings } from "./settings-archived.ts";
 import { initTheme } from "./theme.ts";
-import type { Project, Task, TaskStatus, TaskStatusChangedEvent, SessionInfo } from "./types.ts";
+import type { Project, Task, TaskStatus, TaskStatusChangedEvent, SessionInfo, SettingsPage } from "./types.ts";
 import "./style.css";
 
 interface AppState {
@@ -18,6 +22,8 @@ interface AppState {
   activeSessions: Map<number, string>; // taskId -> sessionId
   debugMode: boolean;
   sidebarCollapsed: boolean;
+  view: "tasks" | "settings";
+  settingsPage: SettingsPage;
 }
 
 const state: AppState = {
@@ -28,6 +34,8 @@ const state: AppState = {
   activeSessions: new Map(),
   debugMode: false,
   sidebarCollapsed: false,
+  view: "tasks",
+  settingsPage: "general",
 };
 
 const SIDEBAR_TOGGLE_ICON = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14M3 10h14M3 15h14"/></svg>`;
@@ -132,7 +140,66 @@ async function killSessionForTask(taskId: number): Promise<void> {
   render();
 }
 
+function renderSettingsView(): void {
+  renderSettingsNav(sidebarEl, state.settingsPage, {
+    onBack() {
+      state.view = "tasks";
+      render();
+    },
+    onPageSelect(page: SettingsPage) {
+      state.settingsPage = page;
+      render();
+    },
+  });
+
+  detachActiveTerminal(mainContentEl);
+  mainContentEl.classList.remove("terminal-mode");
+
+  switch (state.settingsPage) {
+    case "general":
+      renderGeneralSettings(mainContentEl, {
+        async onPreventSleepChange(prevent: boolean) {
+          try {
+            await invoke("set_prevent_sleep", { prevent });
+          } catch (e) {
+            console.error("Failed to set prevent sleep:", e);
+          }
+        },
+      });
+      break;
+    case "worktrees":
+      renderWorktreeSettings(mainContentEl);
+      break;
+    case "archived":
+      renderArchivedSettings(mainContentEl, state.projects, {
+        async onRestore(taskId: number) {
+          try {
+            const updated = await invoke<Task>("update_task_status", { taskId, status: "waiting" });
+            state.tasks.push(updated);
+            render();
+          } catch (e) {
+            console.error("Failed to restore task:", e);
+          }
+        },
+        async onDelete(taskId: number) {
+          try {
+            await invoke("delete_task", { taskId });
+            render();
+          } catch (e) {
+            console.error("Failed to delete task:", e);
+          }
+        },
+      });
+      break;
+  }
+}
+
 function render() {
+  if (state.view === "settings") {
+    renderSettingsView();
+    return;
+  }
+
   renderSidebar(sidebarEl, state.projects, state.tasks, state.selectedTaskId, {
     onTaskSelect(taskId: number) {
       state.selectedTaskId = taskId;
@@ -141,6 +208,12 @@ function render() {
     },
     onNewThread() {
       state.selectedTaskId = null;
+      state.debugMode = false;
+      render();
+    },
+    onNewTaskForProject(projectId: number) {
+      state.selectedTaskId = null;
+      state.selectedProjectId = projectId;
       state.debugMode = false;
       render();
     },
@@ -156,6 +229,11 @@ function render() {
     },
     onToggleSidebar() {
       toggleSidebar();
+    },
+    onOpenSettings() {
+      state.view = "settings";
+      state.debugMode = false;
+      render();
     },
     async onRemoveProject(projectId: number) {
       try {
@@ -326,6 +404,20 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === "b") {
     e.preventDefault();
     toggleSidebar();
+  }
+});
+
+// Cmd+, (Mac) / Ctrl+, (Win/Linux) opens settings
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+    e.preventDefault();
+    if (state.view === "settings") {
+      state.view = "tasks";
+    } else {
+      state.view = "settings";
+      state.debugMode = false;
+    }
+    render();
   }
 });
 

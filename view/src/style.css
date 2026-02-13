@@ -287,6 +287,32 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+}
+
+.project-add-task-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0.15rem;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  margin-left: auto;
+}
+
+.project-group-header:hover .project-add-task-btn {
+  opacity: 1;
+}
+
+.project-add-task-btn:hover {
+  color: var(--accent);
+  background: var(--hover-bg);
 }
 
 /* Task Rows — indented under project */
@@ -391,6 +417,270 @@ body {
   pointer-events: auto;
 }
 
+
+/* Settings Nav (sidebar in settings view) */
+.settings-nav-back {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-nav-back:hover {
+  background: var(--hover-bg);
+  border-color: var(--border-color-strong);
+}
+
+.settings-nav-back svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.settings-nav-list {
+  flex: 1;
+  padding: 0.25rem 0;
+}
+
+.settings-nav-item {
+  display: block;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  margin: 0.05rem 0.35rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-nav-item:hover {
+  background: var(--hover-bg);
+  color: var(--text);
+}
+
+.settings-nav-item--active {
+  background: var(--selected-bg);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Settings Page (main content area) */
+.settings-page {
+  max-width: 560px;
+}
+
+.settings-page-title {
+  margin: 0 0 1.5rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-section {
+  margin-bottom: 1.75rem;
+}
+
+.settings-section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-label {
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.settings-row-sublabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* Segmented control (for theme toggle) */
+.segmented-control {
+  display: flex;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented-btn {
+  padding: 0.35rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.segmented-btn:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.segmented-btn:hover {
+  background: var(--hover-bg);
+}
+
+.segmented-btn--active {
+  background: var(--accent);
+  color: var(--accent-on-bg);
+  font-weight: 600;
+}
+
+.segmented-btn--active:hover {
+  background: var(--accent-hover);
+}
+
+/* Toggle switch */
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 22px;
+  transition: background 0.2s;
+}
+
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+  background: var(--accent-on-bg);
+}
+
+/* Settings input (inline, smaller) */
+.settings-input {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.85rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: inherit;
+  width: 200px;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-input--narrow {
+  width: 60px;
+  text-align: center;
+}
+
+/* Archived task list */
+.archived-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.archived-task-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.archived-task-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.archived-task-name {
+  font-size: 0.85rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.archived-task-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.archived-task-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.archived-empty {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 1rem 0;
+}
 
 /* Status Indicators */
 .status-indicator {

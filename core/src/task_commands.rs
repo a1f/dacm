@@ -93,6 +93,29 @@ pub fn list_tasks_by_project(
 }
 
 #[tauri::command]
+pub fn list_archived_tasks(state: State<'_, DbState>) -> Result<Vec<Task>, String> {
+    let mut conn = state.conn.lock().map_err(|e| e.to_string())?;
+
+    tasks::table
+        .filter(tasks::status.eq("archived"))
+        .select(Task::as_select())
+        .order(tasks::created_at.desc())
+        .load(&mut *conn)
+        .map_err(|e| format!("Failed to list archived tasks: {e}"))
+}
+
+#[tauri::command]
+pub fn delete_task(state: State<'_, DbState>, task_id: i32) -> Result<(), String> {
+    let mut conn = state.conn.lock().map_err(|e| e.to_string())?;
+
+    diesel::delete(tasks::table.filter(tasks::id.eq(task_id)))
+        .execute(&mut *conn)
+        .map_err(|e| format!("Failed to delete task: {e}"))?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_all_tasks(state: State<'_, DbState>) -> Result<Vec<Task>, String> {
     let mut conn = state.conn.lock().map_err(|e| e.to_string())?;
 

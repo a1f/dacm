@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { getTerminalTheme } from "./theme.ts";
+import { getSetting } from "./settings-api.ts";
 import "@xterm/xterm/css/xterm.css";
 
 export interface TerminalSession {
@@ -38,11 +39,21 @@ export async function createTerminalSession(
   sessionId: string,
   onExit: () => void,
 ): Promise<TerminalSession> {
+  let fontFamily = "'SF Mono', 'Fira Code', 'Fira Mono', 'Menlo', monospace";
+  let fontSize = 13;
+  try {
+    fontFamily = await getSetting("terminal_font_family");
+  } catch { /* use default */ }
+  try {
+    const size = parseInt(await getSetting("terminal_font_size"), 10);
+    if (size >= 8 && size <= 24) fontSize = size;
+  } catch { /* use default */ }
+
   const terminal = new Terminal({
     cursorBlink: true,
     cursorStyle: "bar",
-    fontFamily: "'SF Mono', 'Fira Code', 'Fira Mono', 'Menlo', monospace",
-    fontSize: 13,
+    fontFamily,
+    fontSize,
     lineHeight: 1.2,
     scrollback: 100_000,
     theme: getTerminalTheme(),

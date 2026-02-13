@@ -8,6 +8,7 @@ mod session;
 mod session_commands;
 mod settings_commands;
 mod settings_models;
+mod sleep_commands;
 mod task_commands;
 mod task_models;
 
@@ -27,6 +28,7 @@ fn main() {
 
             app.manage(db_state);
             app.manage(session::SessionManager::new());
+            app.manage(sleep_commands::SleepState::new());
 
             Ok(())
         })
@@ -49,6 +51,9 @@ fn main() {
             settings_commands::get_setting,
             settings_commands::set_setting,
             settings_commands::list_settings,
+            sleep_commands::set_prevent_sleep,
+            task_commands::list_archived_tasks,
+            task_commands::delete_task,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -57,6 +62,8 @@ fn main() {
         if let RunEvent::ExitRequested { .. } = event {
             let session_mgr = app_handle.state::<session::SessionManager>();
             session_mgr.kill_all();
+            let sleep_state = app_handle.state::<sleep_commands::SleepState>();
+            sleep_state.kill();
         }
     });
 }

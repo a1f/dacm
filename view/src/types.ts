@@ -36,6 +36,8 @@ export interface Setting {
 
 export type ThemeMode = "light" | "dark" | "system";
 
+export type SettingsPage = "general" | "worktrees" | "archived";
+
 export interface SessionInfo {
   session_id: string;
   task_id: number;
