@@ -179,6 +179,17 @@ function buildInitScript(data: MockData): string {
         return null;
       }
 
+      case "list_archived_tasks":
+        return state.tasks.filter(t => t.status === "archived");
+
+      case "delete_task": {
+        state.tasks = state.tasks.filter(t => t.id !== args.taskId);
+        return null;
+      }
+
+      case "set_prevent_sleep":
+        return null;
+
       // Dialog plugin
       case "plugin:dialog|open":
         return null;

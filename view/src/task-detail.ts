@@ -1,5 +1,6 @@
 import type { Task, TaskStatus } from "./types.ts";
 import { createTerminalSession, type TerminalSession } from "./terminal.ts";
+import { escapeHtml } from "./utils.ts";
 
 export interface TaskDetailCallbacks {
   onStatusChange: (taskId: number, status: TaskStatus) => void;
@@ -15,12 +16,6 @@ interface CachedTerminal {
 
 const terminalCache = new Map<string, CachedTerminal>();
 let activeTerminalSessionId: string | null = null;
-
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
 
 function statusBadgeHtml(status: string): string {
   return `<span class="status-badge status-badge--${status}">${status}</span>`;

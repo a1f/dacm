@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Task } from "./types.ts";
 import type { SessionInfo } from "./types.ts";
+import { escapeHtml } from "./utils.ts";
 
 export interface DebugPanelCallbacks {
   onClose: () => void;
@@ -25,12 +26,6 @@ function formatStartTime(epochSecs: number): string {
   const year = d.getFullYear();
   const time = d.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit", hour12: false });
   return `${day} ${month} ${year}, ${time}`;
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 export function renderDebugPanel(

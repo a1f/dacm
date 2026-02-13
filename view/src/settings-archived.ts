@@ -1,15 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Project, Task } from "./types.ts";
+import { escapeHtml } from "./utils.ts";
 
 export interface ArchivedSettingsCallbacks {
   onRestore: (taskId: number) => void;
   onDelete: (taskId: number) => void;
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 export async function renderArchivedSettings(

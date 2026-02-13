@@ -11,6 +11,7 @@ import { renderGeneralSettings } from "./settings-general.ts";
 import { renderWorktreeSettings } from "./settings-worktrees.ts";
 import { renderArchivedSettings } from "./settings-archived.ts";
 import { initTheme } from "./theme.ts";
+import { getSetting } from "./settings-api.ts";
 import type { Project, Task, TaskStatus, TaskStatusChangedEvent, SessionInfo, SettingsPage } from "./types.ts";
 import "./style.css";
 
@@ -361,6 +362,17 @@ function render() {
   });
 }
 
+async function loadCodeFontSettings(): Promise<void> {
+  try {
+    const family = await getSetting("code_font_family");
+    if (family) document.documentElement.style.setProperty("--code-font-family", family);
+  } catch { /* use default */ }
+  try {
+    const size = await getSetting("code_font_size");
+    if (size) document.documentElement.style.setProperty("--code-font-size", size + "px");
+  } catch { /* use default */ }
+}
+
 async function refresh() {
   try {
     const [projects, tasks, sessions] = await Promise.all([
@@ -390,26 +402,32 @@ listen<TaskStatusChangedEvent>("task-status-changed", (event) => {
   render();
 });
 
-// Ctrl+Shift+D toggles debug panel
+// Centralized keyboard shortcuts — skip when terminal is focused
 document.addEventListener("keydown", (e) => {
+  const inTerminal = document.activeElement?.closest(".terminal-container") !== null;
+
+  // Ctrl+Shift+D — debug panel (always active)
   if (e.ctrlKey && e.shiftKey && e.key === "D") {
     e.preventDefault();
     state.debugMode = !state.debugMode;
     render();
+    return;
   }
-});
 
-// Cmd+B (Mac) / Ctrl+B (Win/Linux) toggles sidebar
-document.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+  // Skip remaining shortcuts when terminal has focus
+  if (inTerminal) return;
+
+  const mod = e.metaKey || e.ctrlKey;
+
+  // Cmd+B — toggle sidebar
+  if (mod && e.key === "b") {
     e.preventDefault();
     toggleSidebar();
+    return;
   }
-});
 
-// Cmd+, (Mac) / Ctrl+, (Win/Linux) opens settings
-document.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+  // Cmd+, — toggle settings
+  if (mod && e.key === ",") {
     e.preventDefault();
     if (state.view === "settings") {
       state.view = "tasks";
@@ -418,10 +436,49 @@ document.addEventListener("keydown", (e) => {
       state.debugMode = false;
     }
     render();
+    return;
+  }
+
+  // Cmd+N — new thread (deselect task, focus prompt)
+  if (mod && e.key === "n") {
+    e.preventDefault();
+    state.selectedTaskId = null;
+    state.debugMode = false;
+    if (state.view === "settings") {
+      state.view = "tasks";
+    }
+    render();
+    requestAnimationFrame(() => {
+      const input = document.querySelector("#start-page-input") as HTMLTextAreaElement | null;
+      input?.focus();
+    });
+    return;
+  }
+
+  // Escape — close settings, deselect task, or close debug
+  if (e.key === "Escape") {
+    if (state.view === "settings") {
+      e.preventDefault();
+      state.view = "tasks";
+      render();
+      return;
+    }
+    if (state.debugMode) {
+      e.preventDefault();
+      state.debugMode = false;
+      render();
+      return;
+    }
+    if (state.selectedTaskId !== null) {
+      e.preventDefault();
+      state.selectedTaskId = null;
+      render();
+      return;
+    }
   }
 });
 
 // Sidebar toggle button click
 sidebarToggleBtn.addEventListener("click", toggleSidebar);
 
-initTheme().then(() => refresh());
+initTheme().then(() => Promise.all([refresh(), loadCodeFontSettings()]));

@@ -19,15 +19,12 @@ test.describe("Sidebar", () => {
   });
 
   test("task rows show status indicators", async ({ dacmPage }) => {
-    // "Add authentication flow" is running
     const runningRow = getTaskRowByName(dacmPage, "Add authentication flow");
     await expect(runningRow.locator(".status-running")).toBeVisible();
 
-    // "Fix pagination bug" is waiting
     const waitingRow = getTaskRowByName(dacmPage, "Fix pagination bug");
     await expect(waitingRow.locator(".status-waiting")).toBeVisible();
 
-    // "Database migration to v2" is completed
     const completedRow = getTaskRowByName(dacmPage, "Database migration to v2");
     await expect(completedRow.locator(".status-completed")).toBeVisible();
   });
@@ -38,15 +35,41 @@ test.describe("Sidebar", () => {
     await expect(row).toHaveClass(/task-row--selected/);
   });
 
-  test("DACM header is visible", async ({ dacmPage }) => {
-    await expect(dacmPage.locator(".sidebar-title")).toHaveText("DACM");
+  test("new thread button is visible", async ({ dacmPage }) => {
+    await expect(dacmPage.locator("#new-thread-btn")).toBeVisible();
+    await expect(dacmPage.locator("#new-thread-btn")).toContainText("New task");
   });
 
-  test("hamburger menu toggles dropdown", async ({ dacmPage }) => {
-    const dropdown = dacmPage.locator("#menu-dropdown");
-    await expect(dropdown).toHaveClass(/hidden/);
+  test("gear button is visible at bottom", async ({ dacmPage }) => {
+    await expect(dacmPage.locator("#sidebar-gear-btn")).toBeVisible();
+  });
 
-    await dacmPage.locator("#hamburger-btn").click();
-    await expect(dropdown).not.toHaveClass(/hidden/);
+  test("project groups have tree chevrons", async ({ dacmPage }) => {
+    const chevrons = dacmPage.locator(".tree-chevron");
+    await expect(chevrons.first()).toBeVisible();
+  });
+
+  test("task rows show age labels", async ({ dacmPage }) => {
+    const ages = dacmPage.locator(".task-age");
+    await expect(ages.first()).toBeVisible();
+  });
+
+  test("clicking project header collapses tasks", async ({ dacmPage }) => {
+    const header = dacmPage.locator(".project-group-header").first();
+    const group = dacmPage.locator(".project-group").first();
+
+    // Initially tasks are visible
+    const tasksBefore = group.locator(".task-row");
+    const countBefore = await tasksBefore.count();
+    expect(countBefore).toBeGreaterThan(0);
+
+    // Click to collapse
+    await header.click();
+    const tasksAfter = group.locator(".task-row");
+    await expect(tasksAfter).toHaveCount(0);
+
+    // Click to expand again
+    await header.click();
+    await expect(group.locator(".task-row")).toHaveCount(countBefore);
   });
 });

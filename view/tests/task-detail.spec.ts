@@ -2,12 +2,10 @@ import { test, expect } from "./fixtures.ts";
 import { getTaskRowByName, getMainContent } from "./helpers.ts";
 
 test.describe("Task Detail", () => {
-  test("shows new task form when no task is selected", async ({ dacmPage }) => {
+  test("shows start page when no task is selected", async ({ dacmPage }) => {
     const main = getMainContent(dacmPage);
-    await expect(main.locator(".new-task-panel-title")).toHaveText("New Task");
-    await expect(main.locator("#ntp-name")).toBeVisible();
-    await expect(main.locator("#ntp-project")).toBeVisible();
-    await expect(main.locator("#ntp-description")).toBeVisible();
+    await expect(main.locator(".start-page-title")).toContainText("What do you want to build?");
+    await expect(main.locator("#start-page-input")).toBeVisible();
   });
 
   test("shows static detail when task is selected", async ({ dacmPage }) => {
@@ -40,5 +38,17 @@ test.describe("Task Detail", () => {
 
     const main = getMainContent(dacmPage);
     await expect(main.locator(".task-detail-section", { hasText: "Iterations" })).toContainText("3");
+  });
+
+  test("archive button removes task from sidebar", async ({ dacmPage }) => {
+    await getTaskRowByName(dacmPage, "Fix pagination bug").click();
+
+    // Mock the confirm dialog
+    dacmPage.on("dialog", (dialog) => dialog.accept());
+
+    await dacmPage.locator("#btn-archive").click();
+
+    // Task should no longer be in sidebar
+    await expect(getTaskRowByName(dacmPage, "Fix pagination bug")).toHaveCount(0);
   });
 });
