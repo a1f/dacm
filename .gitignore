@@ -33,3 +33,6 @@ core/gen/
 # Playwright artifacts
 .playwright-mcp/
 view/test-results/
+
+# Screenshots
+screenshots/
