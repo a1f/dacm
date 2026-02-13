@@ -1,11 +1,10 @@
-import type { Project, Task, TaskStatus } from "./types.ts";
+import type { Task, TaskStatus } from "./types.ts";
 import { createTerminalSession, type TerminalSession } from "./terminal.ts";
 
 export interface TaskDetailCallbacks {
   onStatusChange: (taskId: number, status: TaskStatus) => void;
   onSimulate: (taskId: number) => void;
   onArchive: (taskId: number) => void;
-  onNewTask: (projectId: number, name: string, description: string) => void;
   onKillSession: (taskId: number) => void;
 }
 
@@ -25,45 +24,6 @@ function escapeHtml(text: string): string {
 
 function statusBadgeHtml(status: string): string {
   return `<span class="status-badge status-badge--${status}">${status}</span>`;
-}
-
-function renderNewTaskForm(
-  container: HTMLElement,
-  projects: Project[],
-  callbacks: TaskDetailCallbacks,
-): void {
-  const projectOptionsHtml = projects
-    .map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`)
-    .join("");
-
-  container.innerHTML = `
-    <div class="new-task-panel">
-      <h2 class="new-task-panel-title">New Task</h2>
-      <form class="new-task-panel-form" id="new-task-panel-form">
-        <label class="form-label" for="ntp-name">Name</label>
-        <input type="text" class="form-input" id="ntp-name" placeholder="Task name" required />
-
-        <label class="form-label" for="ntp-project">Project</label>
-        <select class="form-select" id="ntp-project">
-          ${projectOptionsHtml}
-        </select>
-
-        <label class="form-label" for="ntp-description">Description <span class="form-optional">(optional)</span></label>
-        <textarea class="form-textarea" id="ntp-description" placeholder="What needs to be done?" rows="4"></textarea>
-
-        <button type="submit" class="btn btn-simulate" style="margin-top:0.5rem">Create Task</button>
-      </form>
-    </div>`;
-
-  const form = container.querySelector("#new-task-panel-form") as HTMLFormElement;
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const name = (container.querySelector("#ntp-name") as HTMLInputElement).value.trim();
-    const projectId = Number((container.querySelector("#ntp-project") as HTMLSelectElement).value);
-    const description = (container.querySelector("#ntp-description") as HTMLTextAreaElement).value.trim();
-    if (!name) return;
-    callbacks.onNewTask(projectId, name, description);
-  });
 }
 
 function renderTerminalView(
@@ -172,18 +132,10 @@ function renderStaticDetail(
 
 export function renderTaskDetail(
   container: HTMLElement,
-  task: Task | null,
-  projects: Project[],
+  task: Task,
   activeSessionId: string | null,
   callbacks: TaskDetailCallbacks,
 ): void {
-  if (!task) {
-    detachCurrentTerminal(container);
-    container.classList.remove("terminal-mode");
-    renderNewTaskForm(container, projects, callbacks);
-    return;
-  }
-
   if (activeSessionId) {
     renderTerminalView(container, task, activeSessionId, callbacks);
     return;

@@ -19,7 +19,8 @@
       {
         "title": "DACM",
         "width": 1280,
-        "height": 860
+        "height": 860,
+        "titleBarStyle": "Overlay"
       }
     ]
   },

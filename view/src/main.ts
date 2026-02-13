@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { renderSidebar } from "./sidebar.ts";
+import { renderStartPage } from "./start-page.ts";
 import { renderTaskDetail, destroyActiveTerminal, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
 import { clearStream, markStreamStarted } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
@@ -13,28 +14,39 @@ interface AppState {
   projects: Project[];
   tasks: Task[];
   selectedTaskId: number | null;
+  selectedProjectId: number | null;
   activeSessions: Map<number, string>; // taskId -> sessionId
   debugMode: boolean;
+  sidebarCollapsed: boolean;
 }
 
 const state: AppState = {
   projects: [],
   tasks: [],
   selectedTaskId: null,
+  selectedProjectId: null,
   activeSessions: new Map(),
   debugMode: false,
+  sidebarCollapsed: false,
 };
+
+const SIDEBAR_TOGGLE_ICON = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h14M3 10h14M3 15h14"/></svg>`;
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <div class="layout">
+    <div class="titlebar-drag-region" data-tauri-drag-region></div>
     <aside class="sidebar" id="sidebar"></aside>
+    <button class="sidebar-toggle-btn" id="sidebar-toggle-btn" title="Toggle sidebar (Cmd+B)">
+      ${SIDEBAR_TOGGLE_ICON}
+    </button>
     <main class="main-content" id="main-content"></main>
   </div>
 `;
 
 const sidebarEl = document.querySelector<HTMLElement>("#sidebar")!;
 const mainContentEl = document.querySelector<HTMLElement>("#main-content")!;
+const sidebarToggleBtn = document.querySelector<HTMLElement>("#sidebar-toggle-btn")!;
 
 function getSelectedTask(): Task | null {
   if (state.selectedTaskId === null) return null;
@@ -44,6 +56,12 @@ function getSelectedTask(): Task | null {
 function getProjectPath(projectId: number): string | null {
   const project = state.projects.find((p) => p.id === projectId);
   return project?.path ?? null;
+}
+
+function toggleSidebar(): void {
+  state.sidebarCollapsed = !state.sidebarCollapsed;
+  sidebarEl.classList.toggle("sidebar--collapsed", state.sidebarCollapsed);
+  sidebarToggleBtn.classList.toggle("sidebar-toggle-btn--visible", state.sidebarCollapsed);
 }
 
 async function spawnSessionForTask(task: Task): Promise<void> {
@@ -121,17 +139,10 @@ function render() {
       state.debugMode = false;
       render();
     },
-    async onQuickTask(projectId: number, name: string) {
-      try {
-        const task = await invoke<Task>("create_task", { projectId, name });
-        state.tasks.push(task);
-        state.selectedTaskId = task.id;
-        render();
-        await spawnSessionForTask(task);
-        render();
-      } catch (e) {
-        console.error("Failed to create task:", e);
-      }
+    onNewThread() {
+      state.selectedTaskId = null;
+      state.debugMode = false;
+      render();
     },
     async onAddProject() {
       try {
@@ -142,6 +153,9 @@ function render() {
       } catch (e) {
         console.error("Failed to add project:", e);
       }
+    },
+    onToggleSidebar() {
+      toggleSidebar();
     },
     async onRemoveProject(projectId: number) {
       try {
@@ -190,9 +204,49 @@ function render() {
   }
 
   const task = getSelectedTask();
-  const activeSessionId = task ? (state.activeSessions.get(task.id) ?? null) : null;
 
-  renderTaskDetail(mainContentEl, task, state.projects, activeSessionId, {
+  if (!task) {
+    detachActiveTerminal(mainContentEl);
+    mainContentEl.classList.remove("terminal-mode");
+    renderStartPage(mainContentEl, state.projects, state.selectedProjectId, {
+      async onPromptSubmit(projectId: number, prompt: string) {
+        const name = prompt.length > 60 ? prompt.slice(0, 57) + "..." : prompt;
+        try {
+          const task = await invoke<Task>("create_task", {
+            projectId,
+            name,
+            description: prompt,
+          });
+          state.tasks.push(task);
+          state.selectedTaskId = task.id;
+          render();
+          await spawnSessionForTask(task);
+          render();
+        } catch (e) {
+          console.error("Failed to create task:", e);
+        }
+      },
+      onProjectSelect(projectId: number) {
+        state.selectedProjectId = projectId;
+        render();
+      },
+      async onAddProject() {
+        try {
+          const selected = await open({ directory: true, multiple: false });
+          if (!selected) return;
+          await invoke("add_project", { path: selected });
+          await refresh();
+        } catch (e) {
+          console.error("Failed to add project:", e);
+        }
+      },
+    });
+    return;
+  }
+
+  const activeSessionId = state.activeSessions.get(task.id) ?? null;
+
+  renderTaskDetail(mainContentEl, task, activeSessionId, {
     async onStatusChange(taskId: number, status: TaskStatus) {
       try {
         const updated = await invoke<Task>("update_task_status", { taskId, status });
@@ -221,22 +275,6 @@ function render() {
         render();
       } catch (e) {
         console.error("Failed to archive task:", e);
-      }
-    },
-    async onNewTask(projectId: number, name: string, description: string) {
-      try {
-        const task = await invoke<Task>("create_task", {
-          projectId,
-          name,
-          description: description || null,
-        });
-        state.tasks.push(task);
-        state.selectedTaskId = task.id;
-        render();
-        await spawnSessionForTask(task);
-        render();
-      } catch (e) {
-        console.error("Failed to create task:", e);
       }
     },
     async onKillSession(taskId: number) {
@@ -282,5 +320,16 @@ document.addEventListener("keydown", (e) => {
     render();
   }
 });
+
+// Cmd+B (Mac) / Ctrl+B (Win/Linux) toggles sidebar
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+    e.preventDefault();
+    toggleSidebar();
+  }
+});
+
+// Sidebar toggle button click
+sidebarToggleBtn.addEventListener("click", toggleSidebar);
 
 initTheme().then(() => refresh());
