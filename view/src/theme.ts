@@ -29,11 +29,11 @@ export function getTerminalTheme(): ITheme {
   const isDark = getEffectiveTheme() === "dark";
   return isDark
     ? {
-        background: "#1a1a2e",
+        background: "#1e1e1e",
         foreground: "#e0e0e0",
         cursor: "#24c8db",
         selectionBackground: "rgba(36, 200, 219, 0.3)",
-        black: "#1a1a2e",
+        black: "#1e1e1e",
         red: "#e53e3e",
         green: "#48bb78",
         yellow: "#ed8936",

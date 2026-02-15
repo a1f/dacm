@@ -7,9 +7,10 @@ export interface StartPageCallbacks {
   onAddProject: () => void;
 }
 
-const FOLDER_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="opacity:0.6"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5L6.354 1.354A.5.5 0 006 1.5H1.75zM1.5 2.75a.25.25 0 01.25-.25H5.69l1.146 1.146A.5.5 0 007.19 4h7.06a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25V2.75z"/></svg>`;
-const CHEVRON_DOWN = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>`;
-const SEND_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+const FOLDER_ICON = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 1A1.75 1.75 0 000 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0016 13.25v-8.5A1.75 1.75 0 0014.25 3H7.5L6.354 1.354A.5.5 0 006 1.5H1.75zM1.5 2.75a.25.25 0 01.25-.25H5.69l1.146 1.146A.5.5 0 007.19 4h7.06a.25.25 0 01.25.25v8.5a.25.25 0 01-.25.25H1.75a.25.25 0 01-.25-.25V2.75z"/></svg>`;
+const CHEVRON_DOWN = `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>`;
+const BRANCH_ICON = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25z"/></svg>`;
+const SEND_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`;
 
 let activeDropdown: HTMLElement | null = null;
 
@@ -32,11 +33,12 @@ export function renderStartPage(
 
   const hasProjects = projects.length > 0;
   const projectLabel = selectedProject ? escapeHtml(selectedProject.name) : "No projects";
+  const projectPath = selectedProject ? escapeHtml(selectedProject.path) : "";
 
   container.innerHTML = `
     <div class="start-page">
-      <div class="start-page-hero">
-        <h1 class="start-page-title">What do you want to build?</h1>
+      <div class="start-page-header" data-tauri-drag-region>
+        <span class="start-page-header-label">New Task</span>
         ${hasProjects ? `
           <button class="project-picker-btn" id="project-picker-btn">
             ${FOLDER_ICON}
@@ -49,22 +51,34 @@ export function renderStartPage(
           </button>
         `}
       </div>
-      <div class="start-page-prompt">
-        <textarea
-          class="start-page-input"
-          id="start-page-input"
-          placeholder="Describe your task..."
-          rows="1"
-          ${!hasProjects ? "disabled" : ""}
-        ></textarea>
-        <button class="start-page-send-btn" id="start-page-send" ${!hasProjects ? "disabled" : ""} title="Send">
-          ${SEND_ICON}
-        </button>
+      <div class="start-page-terminal-area"></div>
+      <div class="start-page-bottom">
+        <div class="prompt-input-row">
+          <span class="prompt-char">&gt;</span>
+          <textarea
+            class="prompt-textarea"
+            id="start-page-input"
+            placeholder="Describe your task..."
+            rows="1"
+            ${!hasProjects ? "disabled" : ""}
+          ></textarea>
+          <button class="prompt-send-btn" id="prompt-send-btn" ${!hasProjects ? "disabled" : ""} title="Send (Enter)">${SEND_ICON}</button>
+        </div>
+        <div class="prompt-toolbar">
+          <div class="prompt-toolbar-left">
+            <button class="toolbar-chip" id="toolbar-model">Opus 4.6 ${CHEVRON_DOWN}</button>
+            <button class="toolbar-chip" id="toolbar-mode">Auto ${CHEVRON_DOWN}</button>
+          </div>
+          <div class="prompt-toolbar-right">
+            ${hasProjects ? `<span class="toolbar-info">${BRANCH_ICON} main</span>` : ""}
+            <span class="toolbar-info toolbar-path">${projectPath}</span>
+          </div>
+        </div>
       </div>
     </div>`;
 
   const input = container.querySelector("#start-page-input") as HTMLTextAreaElement;
-  const sendBtn = container.querySelector("#start-page-send") as HTMLButtonElement;
+  const sendBtn = container.querySelector("#prompt-send-btn") as HTMLButtonElement;
 
   // Auto-resize textarea
   input.addEventListener("input", () => {
@@ -78,7 +92,6 @@ export function renderStartPage(
     callbacks.onPromptSubmit(selectedProject.id, prompt);
   }
 
-  // Enter to submit (Shift+Enter for newline)
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -88,7 +101,6 @@ export function renderStartPage(
 
   sendBtn.addEventListener("click", submit);
 
-  // Add project button (when no projects)
   container.querySelector("#add-project-btn")?.addEventListener("click", () => {
     callbacks.onAddProject();
   });
@@ -149,7 +161,6 @@ export function renderStartPage(
       document.addEventListener("click", closeDropdown, { once: true });
     }, 0);
 
-    // Esc to close
     const onEsc = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") {
         closeDropdown();
@@ -159,7 +170,6 @@ export function renderStartPage(
     document.addEventListener("keydown", onEsc);
   });
 
-  // Focus the input on render
   if (hasProjects) {
     requestAnimationFrame(() => input.focus());
   }

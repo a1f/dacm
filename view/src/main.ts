@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { renderSidebar } from "./sidebar.ts";
 import { renderStartPage } from "./start-page.ts";
-import { renderTaskDetail, destroyActiveTerminal, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
+import { renderTaskDetail, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
 import { clearStream, markStreamStarted } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
 import { renderSettingsNav } from "./settings-nav.ts";
@@ -21,6 +21,7 @@ interface AppState {
   selectedTaskId: number | null;
   selectedProjectId: number | null;
   activeSessions: Map<number, string>; // taskId -> sessionId
+  sessionUnlisteners: Map<number, () => void>; // taskId -> unlisten function
   debugMode: boolean;
   sidebarCollapsed: boolean;
   view: "tasks" | "settings";
@@ -33,6 +34,7 @@ const state: AppState = {
   selectedTaskId: null,
   selectedProjectId: null,
   activeSessions: new Map(),
+  sessionUnlisteners: new Map(),
   debugMode: false,
   sidebarCollapsed: false,
   view: "tasks",
@@ -86,9 +88,10 @@ async function spawnSessionForTask(task: Task): Promise<void> {
     });
     state.activeSessions.set(task.id, sessionId);
 
-    // When this session exits, update task status and clean up
-    listen<void>(`session-exit-${sessionId}`, async () => {
-      state.activeSessions.delete(task.id);
+    // When this session exits, update task status but keep terminal visible
+    const unlisten = await listen<void>(`session-exit-${sessionId}`, async () => {
+      // Keep session in activeSessions so terminal with scrollback stays visible
+      state.sessionUnlisteners.delete(task.id);
       clearStream(sessionId);
       try {
         const updated = await invoke<Task>("update_task_status", {
@@ -101,6 +104,7 @@ async function spawnSessionForTask(task: Task): Promise<void> {
       }
       render();
     });
+    state.sessionUnlisteners.set(task.id, unlisten);
 
     if (task.status !== "running") {
       const updated = await invoke<Task>("update_task_status", {
@@ -122,6 +126,13 @@ async function killSessionForTask(taskId: number): Promise<void> {
     await invoke("kill_session", { sessionId });
   } catch (e) {
     console.error("Failed to kill session:", e);
+  }
+
+  // Clean up the exit listener
+  const unlisten = state.sessionUnlisteners.get(taskId);
+  if (unlisten) {
+    unlisten();
+    state.sessionUnlisteners.delete(taskId);
   }
 
   destroyTerminalForSession(sessionId);
@@ -286,7 +297,7 @@ function render() {
 
   if (!task) {
     detachActiveTerminal(mainContentEl);
-    mainContentEl.classList.remove("terminal-mode");
+    mainContentEl.classList.add("terminal-mode");
     renderStartPage(mainContentEl, state.projects, state.selectedProjectId, {
       async onPromptSubmit(projectId: number, prompt: string) {
         const name = prompt.length > 60 ? prompt.slice(0, 57) + "..." : prompt;
@@ -345,8 +356,18 @@ function render() {
     async onArchive(taskId: number) {
       try {
         await invoke<Task>("archive_task", { taskId });
+        // Clean up session listener
+        const unlisten = state.sessionUnlisteners.get(taskId);
+        if (unlisten) {
+          unlisten();
+          state.sessionUnlisteners.delete(taskId);
+        }
+        const sessionId = state.activeSessions.get(taskId);
+        if (sessionId) {
+          destroyTerminalForSession(sessionId);
+          clearStream(sessionId);
+        }
         state.activeSessions.delete(taskId);
-        destroyActiveTerminal();
         state.tasks = state.tasks.filter((t) => t.id !== taskId);
         if (state.selectedTaskId === taskId) {
           state.selectedTaskId = null;
@@ -358,6 +379,19 @@ function render() {
     },
     async onKillSession(taskId: number) {
       await killSessionForTask(taskId);
+    },
+    async onRestartSession(taskId: number) {
+      const oldSessionId = state.activeSessions.get(taskId);
+      if (oldSessionId) {
+        destroyTerminalForSession(oldSessionId);
+        state.activeSessions.delete(taskId);
+        clearStream(oldSessionId);
+      }
+      const t = state.tasks.find((t) => t.id === taskId);
+      if (t) {
+        await spawnSessionForTask(t);
+        render();
+      }
     },
   });
 }

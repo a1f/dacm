@@ -7,6 +7,7 @@ export interface TaskDetailCallbacks {
   onSimulate: (taskId: number) => void;
   onArchive: (taskId: number) => void;
   onKillSession: (taskId: number) => void;
+  onRestartSession: (taskId: number) => void;
 }
 
 interface CachedTerminal {
@@ -21,6 +22,61 @@ function statusBadgeHtml(status: string): string {
   return `<span class="status-badge status-badge--${status}">${status}</span>`;
 }
 
+function renderSessionHeader(
+  container: HTMLElement,
+  task: Task,
+  isRunning: boolean,
+  callbacks: TaskDetailCallbacks,
+): void {
+  const headerActions = isRunning
+    ? `<button class="btn btn-kill" id="btn-kill-session">Kill</button>`
+    : `<div class="session-header-actions">
+        <button class="btn btn-session-action" id="btn-archive">Archive</button>
+        <button class="btn btn-restart" id="btn-restart">Restart Session</button>
+      </div>`;
+
+  container.innerHTML = `
+    <div class="session-header" data-tauri-drag-region>
+      <span class="session-header-title">${escapeHtml(task.name)} ${statusBadgeHtml(task.status)}</span>
+      ${headerActions}
+    </div>`;
+
+  if (isRunning) {
+    container.querySelector("#btn-kill-session")?.addEventListener("click", () => {
+      callbacks.onKillSession(task.id);
+    });
+  } else {
+    container.querySelector("#btn-archive")?.addEventListener("click", () => {
+      callbacks.onArchive(task.id);
+    });
+    container.querySelector("#btn-restart")?.addEventListener("click", () => {
+      callbacks.onRestartSession(task.id);
+    });
+  }
+}
+
+function swapToExitedHeader(
+  container: HTMLElement,
+  task: Task,
+  callbacks: TaskDetailCallbacks,
+): void {
+  const headerTitle = container.querySelector(".session-header-title");
+  if (headerTitle) {
+    headerTitle.innerHTML = `${escapeHtml(task.name)} ${statusBadgeHtml("completed")}`;
+  }
+  const killBtn = container.querySelector("#btn-kill-session");
+  if (killBtn) {
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "session-header-actions";
+    actionsDiv.innerHTML = `
+      <button class="btn btn-session-action" id="btn-archive">Archive</button>
+      <button class="btn btn-restart" id="btn-restart">Restart Session</button>`;
+    killBtn.replaceWith(actionsDiv);
+    actionsDiv.querySelector("#btn-archive")?.addEventListener("click", () => callbacks.onArchive(task.id));
+    actionsDiv.querySelector("#btn-restart")?.addEventListener("click", () => callbacks.onRestartSession(task.id));
+  }
+}
+
 function renderTerminalView(
   container: HTMLElement,
   task: Task,
@@ -32,16 +88,9 @@ function renderTerminalView(
   // Detach current terminal wrapper (keep it alive in cache)
   detachCurrentTerminal(container);
 
+  const isRunning = task.status === "running";
   container.classList.add("terminal-mode");
-  container.innerHTML = `
-    <div class="session-header">
-      <span class="session-header-title">${escapeHtml(task.name)} ${statusBadgeHtml(task.status)}</span>
-      <button class="btn btn-kill" id="btn-kill-session">Kill</button>
-    </div>`;
-
-  container.querySelector("#btn-kill-session")?.addEventListener("click", () => {
-    callbacks.onKillSession(task.id);
-  });
+  renderSessionHeader(container, task, isRunning, callbacks);
 
   activeTerminalSessionId = sessionId;
 
@@ -49,7 +98,10 @@ function renderTerminalView(
   if (cached) {
     container.appendChild(cached.wrapper);
     // Refit after reattaching to DOM — layout needs a frame to settle
-    requestAnimationFrame(() => cached.session.fit());
+    requestAnimationFrame(() => {
+      cached.session.fit();
+      cached.session.terminal.focus();
+    });
     return;
   }
 
@@ -59,12 +111,10 @@ function renderTerminalView(
   container.appendChild(wrapper);
 
   createTerminalSession(wrapper, sessionId, () => {
-    const header = container.querySelector(".session-header-title");
-    if (header) {
-      header.innerHTML = `${escapeHtml(task.name)} <span class="status-badge status-badge--completed">exited</span>`;
-    }
+    swapToExitedHeader(container, task, callbacks);
   }).then((session) => {
     terminalCache.set(sessionId, { session, wrapper });
+    session.terminal.focus();
   }).catch((e) => {
     console.error("Failed to create terminal session:", e);
     wrapper.textContent = `Failed to start terminal: ${e}`;
@@ -80,44 +130,28 @@ function detachCurrentTerminal(container: HTMLElement): void {
   activeTerminalSessionId = null;
 }
 
-function renderStaticDetail(
+function renderNoSessionView(
   container: HTMLElement,
   task: Task,
   callbacks: TaskDetailCallbacks,
 ): void {
+  container.classList.add("terminal-mode");
   container.innerHTML = `
-    <div class="task-detail">
-      <div class="task-detail-header">
-        <h2 class="task-detail-name">${escapeHtml(task.name)}</h2>
-        ${statusBadgeHtml(task.status)}
+    <div class="session-header" data-tauri-drag-region>
+      <span class="session-header-title">${escapeHtml(task.name)} ${statusBadgeHtml(task.status)}</span>
+      <div class="session-header-actions">
+        <button class="btn btn-session-action" id="btn-archive">Archive</button>
       </div>
-
-      ${task.description ? `<div class="task-detail-section"><h3>Description</h3><p>${escapeHtml(task.description)}</p></div>` : ""}
-      ${task.summary ? `<div class="task-detail-section"><h3>Summary</h3><p>${escapeHtml(task.summary)}</p></div>` : ""}
-      ${task.branch_name ? `<div class="task-detail-section"><h3>Branch</h3><p class="task-detail-mono">${escapeHtml(task.branch_name)}</p></div>` : ""}
-      ${task.worktree_path ? `<div class="task-detail-section"><h3>Worktree</h3><p class="task-detail-mono">${escapeHtml(task.worktree_path)}</p></div>` : ""}
-
-      <div class="task-detail-section">
-        <h3>Iterations</h3>
-        <p>${task.iteration_count}</p>
-      </div>
-
-      <div class="task-detail-section">
-        <h3>Set Status</h3>
-        <div class="status-buttons">
-          <button class="btn btn-status" data-status="running" ${task.status === "running" ? "disabled" : ""}>Running</button>
-          <button class="btn btn-status" data-status="waiting" ${task.status === "waiting" ? "disabled" : ""}>Waiting</button>
-          <button class="btn btn-status" data-status="completed" ${task.status === "completed" ? "disabled" : ""}>Completed</button>
-          <button class="btn btn-archive" id="btn-archive">Archive</button>
-        </div>
+    </div>
+    <div class="no-session-body">
+      <div class="no-session-message">
+        <span class="no-session-label">Session ended</span>
+        <button class="btn btn-restart" id="btn-restart">Restart Session</button>
       </div>
     </div>`;
 
-  container.querySelectorAll(".btn-status").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const status = (btn as HTMLElement).dataset.status as TaskStatus;
-      callbacks.onStatusChange(task.id, status);
-    });
+  container.querySelector("#btn-restart")?.addEventListener("click", () => {
+    callbacks.onRestartSession(task.id);
   });
 
   container.querySelector("#btn-archive")?.addEventListener("click", () => {
@@ -137,19 +171,7 @@ export function renderTaskDetail(
   }
 
   detachCurrentTerminal(container);
-  container.classList.remove("terminal-mode");
-  renderStaticDetail(container, task, callbacks);
-}
-
-export function destroyActiveTerminal(): void {
-  if (activeTerminalSessionId) {
-    const cached = terminalCache.get(activeTerminalSessionId);
-    if (cached) {
-      cached.session.destroy();
-      terminalCache.delete(activeTerminalSessionId);
-    }
-    activeTerminalSessionId = null;
-  }
+  renderNoSessionView(container, task, callbacks);
 }
 
 export function detachActiveTerminal(container: HTMLElement): void {

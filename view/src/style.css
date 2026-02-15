@@ -13,8 +13,8 @@
 /* Dark theme (default) */
 :root,
 [data-theme="dark"] {
-  --bg: #1a1a2e;
-  --sidebar-bg: #16213e;
+  --bg: #1e1e1e;
+  --sidebar-bg: #181818;
   --text: #e0e0e0;
   --text-muted: #888;
   --text-dim: #666;
@@ -26,7 +26,7 @@
   --btn-hover-bg: rgba(255, 255, 255, 0.1);
   --btn-hover-border: rgba(255, 255, 255, 0.2);
   --mono-bg: rgba(255, 255, 255, 0.04);
-  --dropdown-bg: #1e2a4a;
+  --dropdown-bg: #252525;
   --dropdown-shadow: rgba(0, 0, 0, 0.4);
   --selected-bg: rgba(36, 200, 219, 0.1);
   --accent-on-bg: #0f0f0f;
@@ -78,7 +78,7 @@ body,
 .terminal-container *,
 input,
 textarea,
-.start-page-input {
+.prompt-textarea {
   transition: none;
 }
 
@@ -434,6 +434,12 @@ body {
   pointer-events: auto;
 }
 
+/* When sidebar is collapsed, push header content right to avoid toggle btn overlap */
+.sidebar--collapsed ~ .main-content .session-header,
+.sidebar--collapsed ~ .main-content .start-page-header {
+  padding-left: 2.5rem;
+}
+
 
 /* Settings Nav (sidebar in settings view) */
 .settings-nav-back {
@@ -761,61 +767,6 @@ body {
   background: var(--bg);
 }
 
-/* Task Detail */
-.task-detail-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-dim);
-  font-size: 1rem;
-}
-
-.task-detail {
-  max-width: 640px;
-}
-
-.task-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.task-detail-name {
-  margin: 0;
-  font-size: 1.4rem;
-  font-weight: 600;
-}
-
-.task-detail-section {
-  margin-bottom: 1.25rem;
-}
-
-.task-detail-section h3 {
-  margin: 0 0 0.3rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
-
-.task-detail-section p {
-  margin: 0;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.task-detail-mono {
-  font-family: "SF Mono", "Fira Code", "Fira Mono", monospace;
-  font-size: 0.8rem !important;
-  background: var(--mono-bg);
-  padding: 0.3rem 0.5rem;
-  border-radius: 4px;
-  display: inline-block;
-}
-
 /* Status Badges */
 .status-badge {
   display: inline-block;
@@ -871,17 +822,6 @@ body {
   cursor: not-allowed;
 }
 
-.btn-simulate {
-  background: var(--accent);
-  color: var(--accent-on-bg);
-  border-color: transparent;
-  font-weight: 600;
-}
-
-.btn-simulate:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
 .btn-archive {
   border-color: var(--red);
   color: var(--red);
@@ -897,32 +837,174 @@ body {
   flex-wrap: wrap;
 }
 
-/* Start Page (Codex-style landing) */
+/* Start Page — terminal-style: header, empty area, input at bottom */
 .start-page {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   height: 100%;
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 2rem;
 }
 
-.start-page-hero {
+.start-page-header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 1.25rem;
-  margin-bottom: 2.5rem;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  padding-top: calc(38px + 0.4rem);
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
-.start-page-title {
-  margin: 0;
-  font-size: 1.8rem;
+.start-page-header button,
+.start-page-header .project-picker-btn {
+  -webkit-app-region: no-drag;
+}
+
+.start-page-header-label {
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--text);
-  text-align: center;
+}
+
+.start-page-terminal-area {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Bottom section: input row + toolbar */
+.start-page-bottom {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-color);
+  background: var(--sidebar-bg);
+}
+
+/* Prompt input row */
+.prompt-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.prompt-char {
+  color: var(--accent);
+  font-family: var(--code-font-family, "SF Mono", "Fira Code", "Fira Mono", monospace);
+  font-size: var(--code-font-size, 14px);
+  line-height: 1.5;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.prompt-textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--code-font-family, "SF Mono", "Fira Code", "Fira Mono", monospace);
+  font-size: var(--code-font-size, 14px);
+  line-height: 1.5;
+  resize: none;
+  min-height: 22px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.prompt-textarea:focus {
+  outline: none;
+}
+
+.prompt-textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.prompt-textarea:disabled {
+  opacity: 0.4;
+}
+
+.prompt-send-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.prompt-send-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-on-bg);
+  border-color: var(--accent);
+}
+
+.prompt-send-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Toolbar row below input */
+.prompt-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.75rem 0.4rem;
+}
+
+.prompt-toolbar-left,
+.prompt-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.toolbar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.toolbar-chip:hover {
+  background: var(--hover-bg);
+  border-color: var(--border-color-strong);
+  color: var(--text);
+}
+
+.toolbar-chip svg {
+  opacity: 0.5;
+}
+
+.toolbar-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.toolbar-info svg {
+  opacity: 0.5;
+}
+
+.toolbar-path {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Project picker button */
@@ -998,71 +1080,6 @@ body {
   margin: 0.25rem 0;
 }
 
-/* Prompt input bar */
-.start-page-prompt {
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-  background: var(--input-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
-  transition: border-color 0.15s;
-}
-
-.start-page-prompt:focus-within {
-  border-color: var(--accent);
-}
-
-.start-page-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: 0.95rem;
-  font-family: inherit;
-  line-height: 1.5;
-  resize: none;
-  min-height: 24px;
-  max-height: 160px;
-  overflow-y: auto;
-}
-
-.start-page-input:focus {
-  outline: none;
-}
-
-.start-page-input::placeholder {
-  color: var(--text-faint);
-}
-
-.start-page-input:disabled {
-  opacity: 0.4;
-}
-
-.start-page-send-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: color 0.15s;
-}
-
-.start-page-send-btn:hover:not(:disabled) {
-  color: var(--accent);
-}
-
-.start-page-send-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
 
 /* Form elements (still used in task detail) */
 .form-input,
@@ -1092,21 +1109,28 @@ body {
 /* Terminal Mode — main content becomes a terminal host */
 .main-content.terminal-mode {
   padding: 0;
-  padding-top: 38px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: var(--sidebar-bg);
 }
 
-/* Session header bar above terminal */
+/* Session header bar above terminal — extends into titlebar for drag */
 .session-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.4rem 0.75rem;
+  padding-top: calc(38px + 0.4rem);
   background: var(--sidebar-bg);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.session-header button,
+.session-header .btn {
+  -webkit-app-region: no-drag;
 }
 
 .session-header-title {
@@ -1135,6 +1159,174 @@ body {
 .terminal-container {
   flex: 1;
   min-height: 0;
+}
+
+/* Terminal status bar — bottom bar with mode, model, context, branch */
+.terminal-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.75rem;
+  height: 28px;
+  background: var(--sidebar-bg);
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  z-index: 2;
+}
+
+.statusbar-left,
+.statusbar-center,
+.statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.statusbar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  background: var(--input-bg);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.statusbar-chip:hover {
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
+.statusbar-chip svg {
+  opacity: 0.5;
+}
+
+.statusbar-chip--active {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.statusbar-chip--plan {
+  color: var(--orange);
+  background: var(--orange-bg);
+}
+
+.statusbar-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.statusbar-info svg {
+  opacity: 0.5;
+}
+
+.statusbar-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+  color: var(--text-faint);
+}
+
+.statusbar-hint kbd {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  font-size: 0.6rem;
+  font-family: inherit;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.context-bar {
+  display: inline-block;
+  width: 40px;
+  height: 4px;
+  background: var(--input-bg);
+  border-radius: 2px;
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.context-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.context-bar-fill--warning {
+  background: var(--orange);
+}
+
+.context-bar-fill--critical {
+  background: var(--red);
+}
+
+/* Session header action buttons */
+.session-header-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.btn-session-action {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+.btn-session-action:hover {
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
+/* No-session state (completed/waiting tasks) */
+.no-session-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.no-session-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.no-session-label {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+.btn-restart {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--accent-on-bg);
+  border-color: transparent;
+}
+
+.btn-restart:hover:not(:disabled) {
+  background: var(--accent-hover);
 }
 
 /* Debug Panel */

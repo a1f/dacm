@@ -82,17 +82,28 @@ fn stream_pty_output(
     app_handle: &AppHandle,
 ) {
     let mut buf = [0u8; 4096];
+    let mut total_bytes = 0usize;
+
+    eprintln!("[stream {session_id}] Reader started");
 
     loop {
         match reader.read(&mut buf) {
-            Ok(0) => break,
+            Ok(0) => {
+                eprintln!("[stream {session_id}] EOF after {total_bytes} total bytes");
+                break;
+            }
             Ok(n) => {
+                if total_bytes == 0 {
+                    let preview = String::from_utf8_lossy(&buf[..n.min(500)]);
+                    eprintln!("[stream {session_id}] First output ({n} bytes): {preview:?}");
+                }
+                total_bytes += n;
                 let chunk = buf[..n].to_vec();
                 let event_name = format!("session-output-{session_id}");
                 let _ = app_handle.emit(&event_name, chunk);
             }
             Err(e) => {
-                eprintln!("PTY read error for {session_id}: {e}");
+                eprintln!("[stream {session_id}] Read error after {total_bytes} bytes: {e}");
                 break;
             }
         }
@@ -103,4 +114,5 @@ fn stream_pty_output(
 
     let exit_event = format!("session-exit-{session_id}");
     let _ = app_handle.emit(&exit_event, ());
+    eprintln!("[stream {session_id}] Exit event emitted");
 }

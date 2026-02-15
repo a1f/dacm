@@ -57,6 +57,8 @@ impl SessionManager {
         rows: u16,
         cols: u16,
     ) -> Result<String, String> {
+        eprintln!("[session] Spawning claude in dir: {working_dir}");
+
         let pty_system = native_pty_system();
 
         let pair = pty_system
@@ -71,19 +73,26 @@ impl SessionManager {
         let mut cmd = CommandBuilder::new("claude");
         cmd.cwd(&working_dir);
 
+        // Pass initial prompt as positional argument — Claude CLI starts
+        // an interactive session with that prompt pre-loaded
         if let Some(ref prompt) = initial_prompt {
-            cmd.arg("--prompt");
             cmd.arg(prompt);
         }
 
         cmd.env("TERM", "xterm-256color");
+        // Remove Claude Code's nesting guard so spawned sessions don't refuse to start
+        cmd.env_remove("CLAUDECODE");
 
         let child = pair
             .slave
             .spawn_command(cmd)
-            .map_err(|e| format!("Failed to spawn claude: {e}"))?;
+            .map_err(|e| {
+                eprintln!("[session] Failed to spawn: {e}");
+                format!("Failed to spawn claude: {e}")
+            })?;
 
         let pid = child.process_id();
+        eprintln!("[session] Spawned claude pid={pid:?} size={rows}x{cols}");
 
         let writer = pair
             .master

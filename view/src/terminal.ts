@@ -55,7 +55,7 @@ export async function createTerminalSession(
     fontFamily,
     fontSize,
     lineHeight: 1.2,
-    scrollback: 100_000,
+    scrollback: 50_000,
     theme: getTerminalTheme(),
   });
 
