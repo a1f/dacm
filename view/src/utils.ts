@@ -1,7 +1,14 @@
+import type { ModelOption } from "./types.ts";
+import { ALL_MODELS } from "./constants.ts";
+
 export function escapeHtml(text: string): string {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
+}
+
+export function findModel(id: string): ModelOption | undefined {
+  return ALL_MODELS.find((m) => m.id === id);
 }
 
 export function formatAge(dateStr: string): string {

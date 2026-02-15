@@ -48,3 +48,21 @@ export interface SessionInfo {
   status: SessionStatus;
   working_dir: string;
 }
+
+// --- Model / Interface types ---
+
+export type CodingInterface = "claude" | "codex";
+
+export type ReasoningLevel = "low" | "medium" | "high" | "extra_high";
+
+export interface ModelOption {
+  id: string;
+  label: string;
+  interface: CodingInterface;
+}
+
+export interface ModelGroup {
+  interface: CodingInterface;
+  label: string;
+  models: ModelOption[];
+}
