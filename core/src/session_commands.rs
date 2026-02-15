@@ -11,6 +11,8 @@ pub fn spawn_session(
     project_id: i32,
     working_dir: String,
     initial_prompt: Option<String>,
+    cli_command: Option<String>,
+    model: Option<String>,
     rows: Option<u16>,
     cols: Option<u16>,
 ) -> Result<String, String> {
@@ -19,6 +21,8 @@ pub fn spawn_session(
         project_id,
         working_dir,
         initial_prompt,
+        cli_command,
+        model,
         rows.unwrap_or(24),
         cols.unwrap_or(80),
     )

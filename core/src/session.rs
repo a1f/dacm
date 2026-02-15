@@ -54,10 +54,13 @@ impl SessionManager {
         project_id: i32,
         working_dir: String,
         initial_prompt: Option<String>,
+        cli_command: Option<String>,
+        model: Option<String>,
         rows: u16,
         cols: u16,
     ) -> Result<String, String> {
-        eprintln!("[session] Spawning claude in dir: {working_dir}");
+        let program: &str = cli_command.as_deref().unwrap_or("claude");
+        eprintln!("[session] Spawning {program} in dir: {working_dir}");
 
         let pty_system = native_pty_system();
 
@@ -70,10 +73,15 @@ impl SessionManager {
             })
             .map_err(|e| format!("Failed to open PTY: {e}"))?;
 
-        let mut cmd = CommandBuilder::new("claude");
+        let mut cmd = CommandBuilder::new(program);
         cmd.cwd(&working_dir);
 
-        // Pass initial prompt as positional argument — Claude CLI starts
+        if let Some(ref m) = model {
+            cmd.arg("--model");
+            cmd.arg(m);
+        }
+
+        // Pass initial prompt as positional argument — CLI starts
         // an interactive session with that prompt pre-loaded
         if let Some(ref prompt) = initial_prompt {
             cmd.arg(prompt);
@@ -92,7 +100,7 @@ impl SessionManager {
             })?;
 
         let pid = child.process_id();
-        eprintln!("[session] Spawned claude pid={pid:?} size={rows}x{cols}");
+        eprintln!("[session] Spawned {program} pid={pid:?} size={rows}x{cols}");
 
         let writer = pair
             .master
