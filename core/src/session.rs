@@ -5,6 +5,8 @@ use std::sync::Mutex;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
 
+use crate::constants::DEFAULT_CLI;
+
 pub struct SessionHandle {
     pub task_id: i32,
     pub project_id: i32,
@@ -59,7 +61,7 @@ impl SessionManager {
         rows: u16,
         cols: u16,
     ) -> Result<String, String> {
-        let program: &str = cli_command.as_deref().unwrap_or("claude");
+        let program: &str = cli_command.as_deref().unwrap_or(DEFAULT_CLI);
         eprintln!("[session] Spawning {program} in dir: {working_dir}");
 
         let pty_system = native_pty_system();
