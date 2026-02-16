@@ -1,6 +1,7 @@
 import type { Task, TaskStatus } from "./types.ts";
 import { createTerminalSession, type TerminalSession } from "./terminal.ts";
 import { escapeHtml } from "./utils.ts";
+import { renderToolbar, type ToolbarProps } from "./toolbar.ts";
 
 export interface TaskDetailCallbacks {
   onStatusChange: (taskId: number, status: TaskStatus) => void;
@@ -8,6 +9,9 @@ export interface TaskDetailCallbacks {
   onArchive: (taskId: number) => void;
   onKillSession: (taskId: number) => void;
   onRestartSession: (taskId: number) => void;
+  onModelChange: (modelId: string) => void;
+  onProjectChange: (projectId: number) => void;
+  onAddProject: () => void;
 }
 
 interface CachedTerminal {
@@ -77,10 +81,19 @@ function swapToExitedHeader(
   }
 }
 
+function renderToolbarFromCallbacks(container: HTMLElement, toolbarProps: ToolbarProps, callbacks: TaskDetailCallbacks): void {
+  renderToolbar(container, toolbarProps, {
+    onModelChange: callbacks.onModelChange,
+    onProjectChange: callbacks.onProjectChange,
+    onAddProject: callbacks.onAddProject,
+  });
+}
+
 function renderTerminalView(
   container: HTMLElement,
   task: Task,
   sessionId: string,
+  toolbarProps: ToolbarProps,
   callbacks: TaskDetailCallbacks,
 ): void {
   if (activeTerminalSessionId === sessionId) return;
@@ -97,7 +110,7 @@ function renderTerminalView(
   const cached = terminalCache.get(sessionId);
   if (cached) {
     container.appendChild(cached.wrapper);
-    // Refit after reattaching to DOM — layout needs a frame to settle
+    renderToolbarFromCallbacks(container, toolbarProps, callbacks);
     requestAnimationFrame(() => {
       cached.session.fit();
       cached.session.terminal.focus();
@@ -109,6 +122,7 @@ function renderTerminalView(
   wrapper.className = "terminal-container";
   wrapper.id = "terminal-container";
   container.appendChild(wrapper);
+  renderToolbarFromCallbacks(container, toolbarProps, callbacks);
 
   createTerminalSession(wrapper, sessionId, () => {
     swapToExitedHeader(container, task, callbacks);
@@ -133,6 +147,7 @@ function detachCurrentTerminal(container: HTMLElement): void {
 function renderNoSessionView(
   container: HTMLElement,
   task: Task,
+  toolbarProps: ToolbarProps,
   callbacks: TaskDetailCallbacks,
 ): void {
   container.classList.add("terminal-mode");
@@ -150,6 +165,8 @@ function renderNoSessionView(
       </div>
     </div>`;
 
+  renderToolbarFromCallbacks(container, toolbarProps, callbacks);
+
   container.querySelector("#btn-restart")?.addEventListener("click", () => {
     callbacks.onRestartSession(task.id);
   });
@@ -163,15 +180,16 @@ export function renderTaskDetail(
   container: HTMLElement,
   task: Task,
   activeSessionId: string | null,
+  toolbarProps: ToolbarProps,
   callbacks: TaskDetailCallbacks,
 ): void {
   if (activeSessionId) {
-    renderTerminalView(container, task, activeSessionId, callbacks);
+    renderTerminalView(container, task, activeSessionId, toolbarProps, callbacks);
     return;
   }
 
   detachCurrentTerminal(container);
-  renderNoSessionView(container, task, callbacks);
+  renderNoSessionView(container, task, toolbarProps, callbacks);
 }
 
 export function detachActiveTerminal(container: HTMLElement): void {
