@@ -234,10 +234,14 @@ function render() {
       state.debugMode = false;
       render();
     },
-    onNewTaskForProject(projectId: number) {
+    async onNewTaskForProject(projectId: number) {
+      if (state.selectedTaskId !== null && projectId !== state.selectedProjectId) {
+        await killSessionForTask(state.selectedTaskId);
+      }
       state.selectedTaskId = null;
       state.selectedProjectId = projectId;
       state.debugMode = false;
+      setSetting("last_project_id", String(projectId));
       render();
     },
     async onAddProject() {
