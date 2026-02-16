@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { renderSidebar } from "./sidebar.ts";
 import { renderTaskDetail, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
+import { renderToolbar } from "./toolbar.ts";
 import { clearStream, markStreamStarted } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
 import { renderSettingsNav } from "./settings-nav.ts";
@@ -329,6 +330,29 @@ function render() {
           console.error("Failed to add project:", e);
         }
       });
+      renderToolbar(mainContentEl, {
+        selectedModelId: state.selectedModelId,
+        selectedProject: null,
+        projects: [],
+        branchName: null,
+      }, {
+        onModelChange(modelId: string) {
+          state.selectedModelId = modelId;
+          setSetting("selected_model_id", modelId);
+          render();
+        },
+        async onProjectChange() {},
+        async onAddProject() {
+          try {
+            const selected = await open({ directory: true, multiple: false });
+            if (!selected) return;
+            await invoke("add_project", { path: selected });
+            await refresh();
+          } catch (e) {
+            console.error("Failed to add project:", e);
+          }
+        },
+      });
       return;
     }
 
@@ -339,6 +363,7 @@ function render() {
     if (!projectId) return;
 
     state.autoSpawning = true;
+    const selectedProject = state.projects.find((p) => p.id === projectId) ?? null;
     mainContentEl.innerHTML = `
       <div class="session-header" data-tauri-drag-region>
         <span class="session-header-title">Starting session\u2026</span>
@@ -348,6 +373,34 @@ function render() {
           <span class="no-session-label">Starting session\u2026</span>
         </div>
       </div>`;
+    renderToolbar(mainContentEl, {
+      selectedModelId: state.selectedModelId,
+      selectedProject,
+      projects: state.projects,
+      branchName: null,
+    }, {
+      onModelChange(modelId: string) {
+        state.selectedModelId = modelId;
+        setSetting("selected_model_id", modelId);
+        render();
+      },
+      async onProjectChange(newProjectId: number) {
+        state.selectedProjectId = newProjectId;
+        state.selectedTaskId = null;
+        setSetting("last_project_id", String(newProjectId));
+        render();
+      },
+      async onAddProject() {
+        try {
+          const selected = await open({ directory: true, multiple: false });
+          if (!selected) return;
+          await invoke("add_project", { path: selected });
+          await refresh();
+        } catch (e) {
+          console.error("Failed to add project:", e);
+        }
+      },
+    });
 
     // Auto-create task and spawn session
     (async () => {
