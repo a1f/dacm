@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { renderSidebar } from "./sidebar.ts";
-import { renderStartPage } from "./start-page.ts";
 import { renderTaskDetail, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
 import { clearStream, markStreamStarted } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
@@ -309,29 +308,18 @@ function render() {
   if (!task) {
     detachActiveTerminal(mainContentEl);
     mainContentEl.classList.add("terminal-mode");
-    renderStartPage(mainContentEl, state.projects, state.selectedProjectId, {
-      async onPromptSubmit(projectId: number, prompt: string) {
-        const name = prompt.length > 60 ? prompt.slice(0, 57) + "..." : prompt;
-        try {
-          const task = await invoke<Task>("create_task", {
-            projectId,
-            name,
-            description: prompt,
-          });
-          state.tasks.push(task);
-          state.selectedTaskId = task.id;
-          render();
-          await spawnSessionForTask(task);
-          render();
-        } catch (e) {
-          console.error("Failed to create task:", e);
-        }
-      },
-      onProjectSelect(projectId: number) {
-        state.selectedProjectId = projectId;
-        render();
-      },
-      async onAddProject() {
+
+    // No projects — prompt user to add one
+    if (state.projects.length === 0) {
+      mainContentEl.innerHTML = `
+        <div class="session-header" data-tauri-drag-region></div>
+        <div class="no-session-body">
+          <div class="no-session-message">
+            <span class="no-session-label">No projects configured</span>
+            <button class="btn btn-restart" id="btn-add-project">Add a project</button>
+          </div>
+        </div>`;
+      mainContentEl.querySelector("#btn-add-project")?.addEventListener("click", async () => {
         try {
           const selected = await open({ directory: true, multiple: false });
           if (!selected) return;
@@ -340,8 +328,50 @@ function render() {
         } catch (e) {
           console.error("Failed to add project:", e);
         }
-      },
-    });
+      });
+      return;
+    }
+
+    // Double-spawn guard
+    if (state.autoSpawning) return;
+
+    const projectId = state.selectedProjectId ?? state.projects[0]?.id;
+    if (!projectId) return;
+
+    state.autoSpawning = true;
+    mainContentEl.innerHTML = `
+      <div class="session-header" data-tauri-drag-region>
+        <span class="session-header-title">Starting session\u2026</span>
+      </div>
+      <div class="no-session-body">
+        <div class="no-session-message">
+          <span class="no-session-label">Starting session\u2026</span>
+        </div>
+      </div>`;
+
+    // Auto-create task and spawn session
+    (async () => {
+      try {
+        const now = new Date();
+        const name = `Chat ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+
+        const newTask = await invoke<Task>("create_task", {
+          projectId,
+          name,
+          description: "",
+        });
+        state.tasks.push(newTask);
+        state.selectedTaskId = newTask.id;
+        state.selectedProjectId = projectId;
+        render();
+        await spawnSessionForTask(newTask);
+        render();
+      } catch (e) {
+        console.error("Failed to auto-spawn session:", e);
+      } finally {
+        state.autoSpawning = false;
+      }
+    })();
     return;
   }
 
@@ -524,10 +554,6 @@ document.addEventListener("keydown", (e) => {
       state.view = "tasks";
     }
     render();
-    requestAnimationFrame(() => {
-      const input = document.querySelector("#start-page-input") as HTMLTextAreaElement | null;
-      input?.focus();
-    });
     return;
   }
 
