@@ -13,6 +13,8 @@ import { renderArchivedSettings } from "./settings-archived.ts";
 import { initTheme } from "./theme.ts";
 import { getSetting } from "./settings-api.ts";
 import type { Project, Task, TaskStatus, TaskStatusChangedEvent, SessionInfo, SettingsPage } from "./types.ts";
+import { DEFAULT_CLI, DEFAULT_MODEL_ID } from "./constants.ts";
+import { findModel } from "./utils.ts";
 import "./style.css";
 
 interface AppState {
@@ -20,6 +22,8 @@ interface AppState {
   tasks: Task[];
   selectedTaskId: number | null;
   selectedProjectId: number | null;
+  selectedModelId: string;
+  autoSpawning: boolean;
   activeSessions: Map<number, string>; // taskId -> sessionId
   sessionUnlisteners: Map<number, () => void>; // taskId -> unlisten function
   debugMode: boolean;
@@ -33,6 +37,8 @@ const state: AppState = {
   tasks: [],
   selectedTaskId: null,
   selectedProjectId: null,
+  selectedModelId: DEFAULT_MODEL_ID,
+  autoSpawning: false,
   activeSessions: new Map(),
   sessionUnlisteners: new Map(),
   debugMode: false,
@@ -80,11 +86,16 @@ async function spawnSessionForTask(task: Task): Promise<void> {
   if (!path) return;
 
   try {
+    const model = findModel(state.selectedModelId);
+    const cliCommand = model?.interface ?? DEFAULT_CLI;
+
     const sessionId = await invoke<string>("spawn_session", {
       taskId: task.id,
       projectId: task.project_id,
       workingDir: path,
       initialPrompt: task.description || null,
+      cliCommand,
+      model: state.selectedModelId,
     });
     state.activeSessions.set(task.id, sessionId);
 
@@ -515,4 +526,32 @@ document.addEventListener("keydown", (e) => {
 // Sidebar toggle button click
 sidebarToggleBtn.addEventListener("click", toggleSidebar);
 
-initTheme().then(() => Promise.all([refresh(), loadCodeFontSettings()]));
+async function loadPersistedState(): Promise<void> {
+  try {
+    const projectId = await getSetting("last_project_id");
+    const id = Number(projectId);
+    if (state.projects.some((p) => p.id === id)) {
+      state.selectedProjectId = id;
+    }
+  } catch { /* no persisted project */ }
+
+  try {
+    const modelId = await getSetting("selected_model_id");
+    if (findModel(modelId)) {
+      state.selectedModelId = modelId;
+    }
+  } catch { /* no persisted model */ }
+
+  if (state.selectedProjectId === null && state.projects.length > 0) {
+    state.selectedProjectId = state.projects[0].id;
+  }
+}
+
+async function init(): Promise<void> {
+  await initTheme();
+  await Promise.all([refresh(), loadCodeFontSettings()]);
+  await loadPersistedState();
+  render();
+}
+
+init();

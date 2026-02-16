@@ -25,6 +25,7 @@ export const AVAILABLE_MODELS: ModelGroup[] = [
 
 export const ALL_MODELS: ModelOption[] = AVAILABLE_MODELS.flatMap((g) => g.models);
 
+export const DEFAULT_CLI = "claude";
 export const DEFAULT_MODEL_ID = "claude-opus-4-6";
 
 export const REASONING_LEVELS: { id: ReasoningLevel; label: string }[] = [
