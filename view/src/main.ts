@@ -11,7 +11,7 @@ import { renderGeneralSettings } from "./settings-general.ts";
 import { renderWorktreeSettings } from "./settings-worktrees.ts";
 import { renderArchivedSettings } from "./settings-archived.ts";
 import { initTheme } from "./theme.ts";
-import { getSetting } from "./settings-api.ts";
+import { getSetting, setSetting } from "./settings-api.ts";
 import type { Project, Task, TaskStatus, TaskStatusChangedEvent, SessionInfo, SettingsPage } from "./types.ts";
 import { DEFAULT_CLI, DEFAULT_MODEL_ID } from "./constants.ts";
 import { findModel } from "./utils.ts";
@@ -346,8 +346,15 @@ function render() {
   }
 
   const activeSessionId = state.activeSessions.get(task.id) ?? null;
+  const selectedProject = state.projects.find((p) => p.id === task.project_id) ?? null;
+  const toolbarProps = {
+    selectedModelId: state.selectedModelId,
+    selectedProject,
+    projects: state.projects,
+    branchName: task.branch_name,
+  };
 
-  renderTaskDetail(mainContentEl, task, activeSessionId, {
+  renderTaskDetail(mainContentEl, task, activeSessionId, toolbarProps, {
     async onStatusChange(taskId: number, status: TaskStatus) {
       try {
         const updated = await invoke<Task>("update_task_status", { taskId, status });
@@ -402,6 +409,30 @@ function render() {
       if (t) {
         await spawnSessionForTask(t);
         render();
+      }
+    },
+    onModelChange(modelId: string) {
+      state.selectedModelId = modelId;
+      setSetting("selected_model_id", modelId);
+      render();
+    },
+    async onProjectChange(projectId: number) {
+      if (state.selectedTaskId !== null) {
+        await killSessionForTask(state.selectedTaskId);
+      }
+      state.selectedProjectId = projectId;
+      state.selectedTaskId = null;
+      setSetting("last_project_id", String(projectId));
+      render();
+    },
+    async onAddProject() {
+      try {
+        const selected = await open({ directory: true, multiple: false });
+        if (!selected) return;
+        await invoke("add_project", { path: selected });
+        await refresh();
+      } catch (e) {
+        console.error("Failed to add project:", e);
       }
     },
   });
