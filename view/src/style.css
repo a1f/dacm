@@ -359,6 +359,19 @@ body {
   flex: 1;
 }
 
+.task-name-input {
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 0.25rem;
+  outline: none;
+  flex: 1;
+  min-width: 0;
+}
+
 .task-age {
   font-size: 0.7rem;
   color: var(--text-faint);

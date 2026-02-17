@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { renderSidebar } from "./sidebar.ts";
+import { renderSidebar, triggerRenameSelected } from "./sidebar.ts";
 import { renderTaskDetail, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
 import { renderToolbar } from "./toolbar.ts";
 import { clearStream, markStreamStarted, isSessionActive, hasReceivedOutput } from "./terminal.ts";
@@ -148,6 +148,7 @@ async function autoSpawnNewTask(projectId: number): Promise<void> {
     state.tasks.push(newTask);
     state.selectedTaskId = newTask.id;
     state.selectedProjectId = projectId;
+    setSetting("last_task_id", String(newTask.id));
     render();
     if (!state.autoSpawning) return;
     await spawnSessionForTask(newTask);
@@ -304,7 +305,17 @@ function getSidebarCallbacks(): import("./sidebar.ts").SidebarCallbacks {
     onTaskSelect(taskId: number) {
       state.selectedTaskId = taskId;
       state.debugMode = false;
+      setSetting("last_task_id", String(taskId));
       render();
+    },
+    async onRenameTask(taskId: number, name: string) {
+      try {
+        const updated = await invoke<Task>("rename_task", { taskId, name });
+        state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+        render();
+      } catch (e) {
+        console.error("Failed to rename task:", e);
+      }
     },
     async onNewThread() {
       state.debugMode = false;
@@ -719,10 +730,17 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
+  const mod = e.metaKey || e.ctrlKey;
+
+  // Cmd+E — rename selected task (always active)
+  if (mod && e.key === "e") {
+    e.preventDefault();
+    triggerRenameSelected(sidebarEl, state.selectedTaskId, getSidebarCallbacks());
+    return;
+  }
+
   // Skip remaining shortcuts when terminal has focus
   if (inTerminal) return;
-
-  const mod = e.metaKey || e.ctrlKey;
 
   // Cmd+B — toggle sidebar
   if (mod && e.key === "b") {
@@ -798,6 +816,14 @@ async function loadPersistedState(): Promise<void> {
     }
   } catch { /* no persisted model */ }
 
+  try {
+    const taskId = await getSetting("last_task_id");
+    const id = Number(taskId);
+    if (state.tasks.some((t) => t.id === id)) {
+      state.selectedTaskId = id;
+    }
+  } catch { /* no persisted task */ }
+
   if (state.selectedProjectId === null && state.projects.length > 0) {
     state.selectedProjectId = state.projects[0].id;
   }
@@ -839,10 +865,21 @@ async function init(): Promise<void> {
   await Promise.all([refresh(), loadCodeFontSettings()]);
   await loadPersistedState();
 
-  // If no task is selected after loading, auto-spawn in the current project
   if (state.selectedTaskId === null && state.projects.length > 0) {
     const projectId = state.selectedProjectId ?? state.projects[0].id;
-    await autoSpawnNewTask(projectId);
+
+    // Prefer selecting an existing task (handles page reload / HMR)
+    const projectTasks = state.tasks.filter((t) => t.project_id === projectId);
+    const running = projectTasks.find((t) => t.status === "running");
+    const best = running ?? projectTasks[0] ?? null;
+
+    if (best) {
+      state.selectedTaskId = best.id;
+      setSetting("last_task_id", String(best.id));
+      render();
+    } else {
+      await autoSpawnNewTask(projectId);
+    }
   } else {
     render();
   }

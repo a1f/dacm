@@ -40,6 +40,7 @@ fn main() {
             commands::list_projects,
             task_commands::create_task,
             task_commands::update_task_status,
+            task_commands::rename_task,
             task_commands::archive_task,
             task_commands::list_tasks_by_project,
             task_commands::list_all_tasks,

@@ -61,6 +61,26 @@ pub fn update_task_status(
 }
 
 #[tauri::command]
+pub fn rename_task(
+    state: State<'_, DbState>,
+    task_id: i32,
+    name: String,
+) -> Result<Task, String> {
+    let mut conn = state.conn.lock().map_err(|e| e.to_string())?;
+
+    diesel::update(tasks::table.filter(tasks::id.eq(task_id)))
+        .set(tasks::name.eq(&name))
+        .execute(&mut *conn)
+        .map_err(|e| format!("Failed to rename task: {e}"))?;
+
+    tasks::table
+        .filter(tasks::id.eq(task_id))
+        .select(Task::as_select())
+        .first(&mut *conn)
+        .map_err(|e| format!("Failed to fetch task: {e}"))
+}
+
+#[tauri::command]
 pub fn archive_task(state: State<'_, DbState>, task_id: i32) -> Result<Task, String> {
     let mut conn = state.conn.lock().map_err(|e| e.to_string())?;
 

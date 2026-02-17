@@ -5,6 +5,7 @@ import { escapeHtml, formatAge } from "./utils.ts";
 
 export interface SidebarCallbacks {
   onTaskSelect: (taskId: number) => void;
+  onRenameTask: (taskId: number, name: string) => void;
   onNewThread: () => void;
   onNewTaskForProject: (projectId: number) => void;
   onAddProject: () => void;
@@ -289,11 +290,68 @@ export function renderSidebar(
     });
   });
 
-  // Task selection
+  // Task selection + click-to-rename on already-selected task name
   container.querySelectorAll(".task-row").forEach((row) => {
-    row.addEventListener("click", () => {
+    row.addEventListener("click", (e) => {
       const taskId = Number((row as HTMLElement).dataset.taskId);
+      const clickedName = (e.target as HTMLElement).closest(".task-name");
+      if (clickedName && taskId === selectedTaskId) {
+        e.stopPropagation();
+        startInlineRename(clickedName as HTMLElement, taskId, callbacks);
+        return;
+      }
       callbacks.onTaskSelect(taskId);
     });
   });
+}
+
+function startInlineRename(nameEl: HTMLElement, taskId: number, callbacks: SidebarCallbacks): void {
+  if (nameEl.tagName === "INPUT") return;
+  const currentName = nameEl.textContent ?? "";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "task-name-input";
+  input.value = currentName;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let committed = false;
+  function commit(): void {
+    if (committed) return;
+    committed = true;
+    const newName = input.value.trim();
+    if (newName && newName !== currentName) {
+      callbacks.onRenameTask(taskId, newName);
+    } else {
+      const span = document.createElement("span");
+      span.className = "task-name";
+      span.textContent = currentName;
+      input.replaceWith(span);
+    }
+  }
+
+  input.addEventListener("keydown", (ke) => {
+    if (ke.key === "Enter") {
+      ke.preventDefault();
+      commit();
+    } else if (ke.key === "Escape") {
+      ke.preventDefault();
+      committed = true;
+      const span = document.createElement("span");
+      span.className = "task-name";
+      span.textContent = currentName;
+      input.replaceWith(span);
+    }
+  });
+
+  input.addEventListener("blur", commit);
+}
+
+export function triggerRenameSelected(container: HTMLElement, selectedTaskId: number | null, callbacks: SidebarCallbacks): void {
+  if (selectedTaskId === null) return;
+  const row = container.querySelector(`.task-row[data-task-id="${selectedTaskId}"]`);
+  const nameEl = row?.querySelector(".task-name") as HTMLElement | null;
+  if (nameEl) startInlineRename(nameEl, selectedTaskId, callbacks);
 }
