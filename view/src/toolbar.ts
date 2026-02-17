@@ -1,4 +1,4 @@
-import type { Project } from "./types.ts";
+import type { Project, CodingInterface } from "./types.ts";
 import { AVAILABLE_MODELS } from "./constants.ts";
 import { escapeHtml } from "./utils.ts";
 
@@ -26,37 +26,76 @@ function closeDropdown(): void {
   activeDropdown = null;
 }
 
-function getModelLabel(modelId: string): string {
+function getInterfaceForModel(modelId: string): CodingInterface {
+  for (const group of AVAILABLE_MODELS) {
+    if (group.models.some((m) => m.id === modelId)) return group.interface;
+  }
+  return "claude";
+}
+
+function getInterfaceLabel(modelId: string): string {
+  for (const group of AVAILABLE_MODELS) {
+    if (group.models.some((m) => m.id === modelId)) return group.label;
+  }
+  return "Claude";
+}
+
+function getModelDisplayLabel(modelId: string): string {
   for (const group of AVAILABLE_MODELS) {
     const model = group.models.find((m) => m.id === modelId);
-    if (model) return `${group.label} ${CHEVRON_DOWN}`;
+    if (model) return model.label;
   }
-  return `Model ${CHEVRON_DOWN}`;
+  return "Model";
+}
+
+function openInterfaceDropdown(anchor: HTMLElement, selectedModelId: string, onSelect: (id: string) => void): void {
+  closeDropdown();
+
+  const currentInterface = getInterfaceForModel(selectedModelId);
+  const dropdown = document.createElement("div");
+  dropdown.className = "toolbar-dropdown";
+
+  for (const group of AVAILABLE_MODELS) {
+    const item = document.createElement("button");
+    item.className = "toolbar-dropdown-item";
+    if (group.interface === currentInterface) item.classList.add("toolbar-dropdown-item--active");
+    item.innerHTML = `<span>${escapeHtml(group.label)}</span>${group.interface === currentInterface ? '<span class="toolbar-dropdown-check">&#10003;</span>' : ""}`;
+    item.addEventListener("click", () => {
+      // Select first model in the chosen interface group
+      onSelect(group.models[0].id);
+      closeDropdown();
+    });
+    dropdown.appendChild(item);
+  }
+
+  positionDropdown(dropdown, anchor);
+  activeDropdown = dropdown;
+
+  setTimeout(() => {
+    document.addEventListener("click", closeDropdown, { once: true });
+  }, 0);
 }
 
 function openModelDropdown(anchor: HTMLElement, selectedModelId: string, onSelect: (id: string) => void): void {
   closeDropdown();
 
+  const currentInterface = getInterfaceForModel(selectedModelId);
+  const group = AVAILABLE_MODELS.find((g) => g.interface === currentInterface);
+  if (!group) return;
+
   const dropdown = document.createElement("div");
   dropdown.className = "toolbar-dropdown";
 
-  for (const group of AVAILABLE_MODELS) {
-    const label = document.createElement("div");
-    label.className = "toolbar-dropdown-group-label";
-    label.textContent = group.label;
-    dropdown.appendChild(label);
-
-    for (const model of group.models) {
-      const item = document.createElement("button");
-      item.className = "toolbar-dropdown-item";
-      if (model.id === selectedModelId) item.classList.add("toolbar-dropdown-item--active");
-      item.innerHTML = `<span>${escapeHtml(model.label)}</span>${model.id === selectedModelId ? '<span class="toolbar-dropdown-check">&#10003;</span>' : ""}`;
-      item.addEventListener("click", () => {
-        onSelect(model.id);
-        closeDropdown();
-      });
-      dropdown.appendChild(item);
-    }
+  for (const model of group.models) {
+    const item = document.createElement("button");
+    item.className = "toolbar-dropdown-item";
+    if (model.id === selectedModelId) item.classList.add("toolbar-dropdown-item--active");
+    item.innerHTML = `<span>${escapeHtml(model.label)}</span>${model.id === selectedModelId ? '<span class="toolbar-dropdown-check">&#10003;</span>' : ""}`;
+    item.addEventListener("click", () => {
+      onSelect(model.id);
+      closeDropdown();
+    });
+    dropdown.appendChild(item);
   }
 
   positionDropdown(dropdown, anchor);
@@ -126,10 +165,13 @@ export function renderToolbar(
   toolbar.className = "bottom-toolbar";
 
   const projectName = props.selectedProject ? escapeHtml(props.selectedProject.name) : "No project";
+  const interfaceLabel = getInterfaceLabel(props.selectedModelId);
+  const modelLabel = getModelDisplayLabel(props.selectedModelId);
 
   toolbar.innerHTML = `
     <div class="bottom-toolbar-left">
-      <button class="statusbar-chip" id="toolbar-model-btn">${getModelLabel(props.selectedModelId)}</button>
+      <button class="statusbar-chip" id="toolbar-interface-btn">${escapeHtml(interfaceLabel)} ${CHEVRON_DOWN}</button>
+      <button class="statusbar-chip" id="toolbar-model-btn">${escapeHtml(modelLabel)} ${CHEVRON_DOWN}</button>
     </div>
     <div class="bottom-toolbar-right">
       ${props.branchName ? `<span class="statusbar-info">${BRANCH_ICON} ${escapeHtml(props.branchName)}</span>` : ""}
@@ -137,6 +179,11 @@ export function renderToolbar(
     </div>`;
 
   container.appendChild(toolbar);
+
+  toolbar.querySelector("#toolbar-interface-btn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openInterfaceDropdown(e.currentTarget as HTMLElement, props.selectedModelId, callbacks.onModelChange);
+  });
 
   toolbar.querySelector("#toolbar-model-btn")?.addEventListener("click", (e) => {
     e.stopPropagation();

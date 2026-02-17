@@ -6,7 +6,7 @@ use crate::db::DbState;
 use crate::schema::tasks;
 use crate::task_models::{NewTask, Task, TaskStatusChanged};
 
-const VALID_STATUSES: &[&str] = &["running", "waiting", "completed", "archived"];
+const VALID_STATUSES: &[&str] = &["running", "waiting", "completed", "failed", "archived"];
 
 #[tauri::command]
 pub fn create_task(

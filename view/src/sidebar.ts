@@ -9,6 +9,7 @@ export interface SidebarCallbacks {
   onNewTaskForProject: (projectId: number) => void;
   onAddProject: () => void;
   onRemoveProject: (projectId: number) => void;
+  onArchiveTask: (taskId: number) => void;
   onToggleSidebar: () => void;
   onOpenSettings: () => void;
 }
@@ -23,6 +24,8 @@ function statusIndicatorHtml(status: string): string {
       return `<span class="status-indicator status-waiting" title="Waiting">?</span>`;
     case "completed":
       return `<span class="status-indicator status-completed" title="Completed"></span>`;
+    case "failed":
+      return `<span class="status-indicator status-failed" title="Failed"></span>`;
     default:
       return "";
   }
@@ -73,6 +76,8 @@ function ensureEscListener(): void {
   });
 }
 
+const ARCHIVE_ICON = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>`;
+
 export function renderSidebar(
   container: HTMLElement,
   projects: Project[],
@@ -80,6 +85,10 @@ export function renderSidebar(
   selectedTaskId: number | null,
   callbacks: SidebarCallbacks,
 ): void {
+  // Preserve scroll position across re-renders
+  const tree = container.querySelector(".sidebar-tree");
+  const scrollTop = tree?.scrollTop ?? 0;
+
   const tasksByProject = new Map<number, Task[]>();
   for (const task of tasks) {
     const list = tasksByProject.get(task.project_id) ?? [];
@@ -87,10 +96,9 @@ export function renderSidebar(
     tasksByProject.set(task.project_id, list);
   }
 
-  const statusOrder: Record<string, number> = { waiting: 0, running: 1, completed: 2 };
-  for (const [projectId, projectTasks] of tasksByProject) {
-    projectTasks.sort((a, b) => (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3));
-    tasksByProject.set(projectId, projectTasks);
+  // Sort by created_at descending (newest first)
+  for (const [, projectTasks] of tasksByProject) {
+    projectTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
   const projectGroupsHtml = projects
@@ -107,6 +115,7 @@ export function renderSidebar(
             ${statusIndicatorHtml(task.status)}
             <span class="task-name">${escapeHtml(task.name)}</span>
             <span class="task-age">${formatAge(task.created_at)}</span>
+            <button class="task-archive-btn" data-archive-task-id="${task.id}" title="Archive">${ARCHIVE_ICON}</button>
           </div>`,
             )
             .join("");
@@ -209,6 +218,10 @@ export function renderSidebar(
     }, 0);
   });
 
+  // Restore scroll position
+  const newTree = container.querySelector(".sidebar-tree");
+  if (newTree) newTree.scrollTop = scrollTop;
+
   // Project header click — toggle collapse
   container.querySelectorAll(".project-group-header").forEach((header) => {
     header.addEventListener("click", () => {
@@ -264,6 +277,15 @@ export function renderSidebar(
       setTimeout(() => {
         document.addEventListener("click", closeContextMenu, { once: true });
       }, 0);
+    });
+  });
+
+  // Task archive button
+  container.querySelectorAll(".task-archive-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const taskId = Number((btn as HTMLElement).dataset.archiveTaskId);
+      callbacks.onArchiveTask(taskId);
     });
   });
 

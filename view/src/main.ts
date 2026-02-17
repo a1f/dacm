@@ -4,8 +4,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { renderSidebar } from "./sidebar.ts";
 import { renderTaskDetail, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
 import { renderToolbar } from "./toolbar.ts";
-import { clearStream, markStreamStarted } from "./terminal.ts";
+import { clearStream, markStreamStarted, isSessionActive, hasReceivedOutput } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
+import { togglePerfOverlay } from "./perf-overlay.ts";
 import { renderSettingsNav } from "./settings-nav.ts";
 import { renderGeneralSettings } from "./settings-general.ts";
 import { renderWorktreeSettings } from "./settings-worktrees.ts";
@@ -81,6 +82,83 @@ function toggleSidebar(): void {
   sidebarToggleBtn.classList.toggle("sidebar-toggle-btn--visible", state.sidebarCollapsed);
 }
 
+async function handleModelChange(modelId: string): Promise<void> {
+  state.selectedModelId = modelId;
+  setSetting("selected_model_id", modelId);
+
+  if (state.selectedTaskId !== null) {
+    const task = getSelectedTask();
+    if (task) {
+      const sessionId = state.activeSessions.get(task.id);
+      if (sessionId) {
+        // Kill old session inline (skip status change to "waiting" — we're restarting)
+        try { await invoke("kill_session", { sessionId }); } catch {}
+        const unlisten = state.sessionUnlisteners.get(task.id);
+        if (unlisten) { unlisten(); state.sessionUnlisteners.delete(task.id); }
+        destroyTerminalForSession(sessionId);
+        state.activeSessions.delete(task.id);
+        clearStream(sessionId);
+      }
+      // Respawn session for the SAME task with new model (no intermediate render)
+      await spawnSessionForTask(task);
+      render();
+      return;
+    }
+  }
+  render();
+}
+
+async function handleProjectChange(newProjectId: number): Promise<void> {
+  if (newProjectId === state.selectedProjectId && state.selectedTaskId !== null) return;
+
+  state.autoSpawning = false;
+  if (state.selectedTaskId !== null) {
+    await killSessionForTask(state.selectedTaskId);
+  }
+  state.selectedProjectId = newProjectId;
+
+  // Select the most recent running task in the target project, or the most recent task overall
+  const projectTasks = state.tasks.filter((t) => t.project_id === newProjectId);
+  const running = projectTasks.find((t) => t.status === "running");
+  const best = running ?? projectTasks[0] ?? null;
+  state.selectedTaskId = best?.id ?? null;
+
+  setSetting("last_project_id", String(newProjectId));
+  render();
+}
+
+async function autoSpawnNewTask(projectId: number): Promise<void> {
+  if (state.autoSpawning) return;
+
+  state.autoSpawning = true;
+  state.selectedProjectId = projectId;
+  state.selectedTaskId = null;
+  render(); // shows "Starting session…"
+
+  try {
+    const now = new Date();
+    const name = `Chat ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+
+    const newTask = await invoke<Task>("create_task", {
+      projectId,
+      name,
+      description: "",
+    });
+    if (!state.autoSpawning) return;
+    state.tasks.push(newTask);
+    state.selectedTaskId = newTask.id;
+    state.selectedProjectId = projectId;
+    render();
+    if (!state.autoSpawning) return;
+    await spawnSessionForTask(newTask);
+    render();
+  } catch (e) {
+    console.error("Failed to auto-spawn session:", e);
+  } finally {
+    state.autoSpawning = false;
+  }
+}
+
 async function spawnSessionForTask(task: Task): Promise<void> {
   const path = getProjectPath(task.project_id);
   if (!path) return;
@@ -99,11 +177,17 @@ async function spawnSessionForTask(task: Task): Promise<void> {
     });
     state.activeSessions.set(task.id, sessionId);
 
-    // When this session exits, update task status but keep terminal visible
+    // When this session exits, clean up and update task status
     const unlisten = await listen<void>(`session-exit-${sessionId}`, async () => {
-      // Keep session in activeSessions so terminal with scrollback stays visible
-      state.sessionUnlisteners.delete(task.id);
+      // Deregister this listener
+      const unsub = state.sessionUnlisteners.get(task.id);
+      if (unsub) { unsub(); state.sessionUnlisteners.delete(task.id); }
+
+      // Destroy terminal to free xterm.js memory
+      destroyTerminalForSession(sessionId);
+      state.activeSessions.delete(task.id);
       clearStream(sessionId);
+
       try {
         const updated = await invoke<Task>("update_task_status", {
           taskId: task.id,
@@ -159,8 +243,6 @@ async function killSessionForTask(taskId: number): Promise<void> {
   } catch (e) {
     console.error("Failed to update task status:", e);
   }
-
-  render();
 }
 
 function renderSettingsView(): void {
@@ -217,32 +299,27 @@ function renderSettingsView(): void {
   }
 }
 
-function render() {
-  if (state.view === "settings") {
-    renderSettingsView();
-    return;
-  }
-
-  renderSidebar(sidebarEl, state.projects, state.tasks, state.selectedTaskId, {
+function getSidebarCallbacks(): import("./sidebar.ts").SidebarCallbacks {
+  return {
     onTaskSelect(taskId: number) {
       state.selectedTaskId = taskId;
       state.debugMode = false;
       render();
     },
-    onNewThread() {
-      state.selectedTaskId = null;
+    async onNewThread() {
       state.debugMode = false;
-      render();
+      const projectId = state.selectedProjectId ?? state.projects[0]?.id;
+      if (projectId) {
+        await autoSpawnNewTask(projectId);
+      }
     },
     async onNewTaskForProject(projectId: number) {
       if (state.selectedTaskId !== null && projectId !== state.selectedProjectId) {
         await killSessionForTask(state.selectedTaskId);
       }
-      state.selectedTaskId = null;
-      state.selectedProjectId = projectId;
       state.debugMode = false;
       setSetting("last_project_id", String(projectId));
-      render();
+      await autoSpawnNewTask(projectId);
     },
     async onAddProject() {
       try {
@@ -252,6 +329,31 @@ function render() {
         await refresh();
       } catch (e) {
         console.error("Failed to add project:", e);
+      }
+    },
+    async onArchiveTask(taskId: number) {
+      try {
+        await invoke<Task>("archive_task", { taskId });
+        const unlisten = state.sessionUnlisteners.get(taskId);
+        if (unlisten) { unlisten(); state.sessionUnlisteners.delete(taskId); }
+        const sessionId = state.activeSessions.get(taskId);
+        if (sessionId) {
+          destroyTerminalForSession(sessionId);
+          clearStream(sessionId);
+        }
+        state.activeSessions.delete(taskId);
+        const archivedProjectId = state.tasks.find((t) => t.id === taskId)?.project_id;
+        state.tasks = state.tasks.filter((t) => t.id !== taskId);
+        if (state.selectedTaskId === taskId) {
+          // Select next task in same project, or null
+          const siblings = archivedProjectId
+            ? state.tasks.filter((t) => t.project_id === archivedProjectId)
+            : [];
+          state.selectedTaskId = siblings[0]?.id ?? null;
+        }
+        render();
+      } catch (e) {
+        console.error("Failed to archive task:", e);
       }
     },
     onToggleSidebar() {
@@ -275,7 +377,20 @@ function render() {
         console.error("Failed to remove project:", e);
       }
     },
-  });
+  };
+}
+
+function refreshSidebar(): void {
+  renderSidebar(sidebarEl, state.projects, state.tasks, state.selectedTaskId, getSidebarCallbacks());
+}
+
+function render() {
+  if (state.view === "settings") {
+    renderSettingsView();
+    return;
+  }
+
+  refreshSidebar();
 
   if (state.debugMode) {
     mainContentEl.classList.remove("terminal-mode");
@@ -340,10 +455,8 @@ function render() {
         projects: [],
         branchName: null,
       }, {
-        onModelChange(modelId: string) {
-          state.selectedModelId = modelId;
-          setSetting("selected_model_id", modelId);
-          render();
+        async onModelChange(modelId: string) {
+          await handleModelChange(modelId);
         },
         async onProjectChange() {},
         async onAddProject() {
@@ -360,39 +473,70 @@ function render() {
       return;
     }
 
-    // Double-spawn guard
-    if (state.autoSpawning) return;
+    // Currently auto-spawning — show loading state
+    if (state.autoSpawning) {
+      const selectedProject = state.projects.find((p) => p.id === state.selectedProjectId) ?? null;
+      mainContentEl.innerHTML = `
+        <div class="session-header" data-tauri-drag-region>
+          <span class="session-header-title">Starting session\u2026</span>
+        </div>
+        <div class="no-session-body">
+          <div class="no-session-message">
+            <span class="no-session-label">Starting session\u2026</span>
+          </div>
+        </div>`;
+      renderToolbar(mainContentEl, {
+        selectedModelId: state.selectedModelId,
+        selectedProject,
+        projects: state.projects,
+        branchName: null,
+      }, {
+        async onModelChange(modelId: string) {
+          await handleModelChange(modelId);
+        },
+        async onProjectChange(newProjectId: number) {
+          await handleProjectChange(newProjectId);
+        },
+        async onAddProject() {
+          try {
+            const selected = await open({ directory: true, multiple: false });
+            if (!selected) return;
+            await invoke("add_project", { path: selected });
+            await refresh();
+          } catch (e) {
+            console.error("Failed to add project:", e);
+          }
+        },
+      });
+      return;
+    }
 
+    // No task selected — show empty state (no auto-spawn)
     const projectId = state.selectedProjectId ?? state.projects[0]?.id;
-    if (!projectId) return;
-
-    state.autoSpawning = true;
-    const selectedProject = state.projects.find((p) => p.id === projectId) ?? null;
+    const selectedProject = projectId ? state.projects.find((p) => p.id === projectId) ?? null : null;
     mainContentEl.innerHTML = `
-      <div class="session-header" data-tauri-drag-region>
-        <span class="session-header-title">Starting session\u2026</span>
-      </div>
+      <div class="session-header" data-tauri-drag-region></div>
       <div class="no-session-body">
         <div class="no-session-message">
-          <span class="no-session-label">Starting session\u2026</span>
+          <span class="no-session-label">No active session</span>
+          <button class="btn btn-restart" id="btn-new-session">New session</button>
         </div>
       </div>`;
+    mainContentEl.querySelector("#btn-new-session")?.addEventListener("click", async () => {
+      const pid = state.selectedProjectId ?? state.projects[0]?.id;
+      if (pid) await autoSpawnNewTask(pid);
+    });
     renderToolbar(mainContentEl, {
       selectedModelId: state.selectedModelId,
       selectedProject,
       projects: state.projects,
       branchName: null,
     }, {
-      onModelChange(modelId: string) {
-        state.selectedModelId = modelId;
-        setSetting("selected_model_id", modelId);
-        render();
+      async onModelChange(modelId: string) {
+        await handleModelChange(modelId);
       },
       async onProjectChange(newProjectId: number) {
-        state.selectedProjectId = newProjectId;
-        state.selectedTaskId = null;
-        setSetting("last_project_id", String(newProjectId));
-        render();
+        await handleProjectChange(newProjectId);
       },
       async onAddProject() {
         try {
@@ -405,30 +549,6 @@ function render() {
         }
       },
     });
-
-    // Auto-create task and spawn session
-    (async () => {
-      try {
-        const now = new Date();
-        const name = `Chat ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
-
-        const newTask = await invoke<Task>("create_task", {
-          projectId,
-          name,
-          description: "",
-        });
-        state.tasks.push(newTask);
-        state.selectedTaskId = newTask.id;
-        state.selectedProjectId = projectId;
-        render();
-        await spawnSessionForTask(newTask);
-        render();
-      } catch (e) {
-        console.error("Failed to auto-spawn session:", e);
-      } finally {
-        state.autoSpawning = false;
-      }
-    })();
     return;
   }
 
@@ -461,7 +581,6 @@ function render() {
     async onArchive(taskId: number) {
       try {
         await invoke<Task>("archive_task", { taskId });
-        // Clean up session listener
         const unlisten = state.sessionUnlisteners.get(taskId);
         if (unlisten) {
           unlisten();
@@ -473,9 +592,13 @@ function render() {
           clearStream(sessionId);
         }
         state.activeSessions.delete(taskId);
+        const archivedProjectId = state.tasks.find((t) => t.id === taskId)?.project_id;
         state.tasks = state.tasks.filter((t) => t.id !== taskId);
         if (state.selectedTaskId === taskId) {
-          state.selectedTaskId = null;
+          const siblings = archivedProjectId
+            ? state.tasks.filter((t) => t.project_id === archivedProjectId)
+            : [];
+          state.selectedTaskId = siblings[0]?.id ?? null;
         }
         render();
       } catch (e) {
@@ -484,6 +607,7 @@ function render() {
     },
     async onKillSession(taskId: number) {
       await killSessionForTask(taskId);
+      render();
     },
     async onRestartSession(taskId: number) {
       const oldSessionId = state.activeSessions.get(taskId);
@@ -498,19 +622,11 @@ function render() {
         render();
       }
     },
-    onModelChange(modelId: string) {
-      state.selectedModelId = modelId;
-      setSetting("selected_model_id", modelId);
-      render();
+    async onModelChange(modelId: string) {
+      await handleModelChange(modelId);
     },
     async onProjectChange(projectId: number) {
-      if (state.selectedTaskId !== null) {
-        await killSessionForTask(state.selectedTaskId);
-      }
-      state.selectedProjectId = projectId;
-      state.selectedTaskId = null;
-      setSetting("last_project_id", String(projectId));
-      render();
+      await handleProjectChange(projectId);
     },
     async onAddProject() {
       try {
@@ -545,12 +661,31 @@ async function refresh() {
     ]);
     state.projects = projects;
     state.tasks = tasks;
+
+    const runningSessionTaskIds = new Set(
+      sessions.filter((s) => s.status === "running").map((s) => s.task_id),
+    );
+
     for (const s of sessions) {
       if (s.status === "running" && !state.activeSessions.has(s.task_id)) {
         state.activeSessions.set(s.task_id, s.session_id);
         markStreamStarted(s.session_id);
       }
     }
+
+    // Reconcile stale "running" tasks: if no backend session exists, mark completed
+    for (const task of state.tasks) {
+      if (task.status === "running" && !runningSessionTaskIds.has(task.id)) {
+        try {
+          const updated = await invoke<Task>("update_task_status", {
+            taskId: task.id,
+            status: "completed",
+          });
+          state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+        } catch { /* ignore */ }
+      }
+    }
+
     render();
   } catch (e) {
     console.error("Failed to load data:", e);
@@ -574,6 +709,13 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     state.debugMode = !state.debugMode;
     render();
+    return;
+  }
+
+  // Ctrl+Shift+P — performance overlay (always active)
+  if (e.ctrlKey && e.shiftKey && e.key === "P") {
+    e.preventDefault();
+    togglePerfOverlay();
     return;
   }
 
@@ -602,15 +744,15 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  // Cmd+N — new thread (deselect task, focus prompt)
+  // Cmd+N — new session
   if (mod && e.key === "n") {
     e.preventDefault();
-    state.selectedTaskId = null;
     state.debugMode = false;
     if (state.view === "settings") {
       state.view = "tasks";
     }
-    render();
+    const pid = state.selectedProjectId ?? state.projects[0]?.id;
+    if (pid) autoSpawnNewTask(pid);
     return;
   }
 
@@ -661,11 +803,49 @@ async function loadPersistedState(): Promise<void> {
   }
 }
 
+// Idle detection: mark running tasks as completed when PTY output stops,
+// and mark them running again when output resumes.
+const IDLE_THRESHOLD_MS = 5000;
+setInterval(() => {
+  for (const [taskId, sessionId] of state.activeSessions) {
+    const task = state.tasks.find((t) => t.id === taskId);
+    if (!task) continue;
+
+    const active = isSessionActive(sessionId, IDLE_THRESHOLD_MS);
+    const received = hasReceivedOutput(sessionId);
+
+    if (task.status === "running" && !active && received) {
+      // Idle for 5s after receiving output — mark completed
+      invoke<Task>("update_task_status", { taskId, status: "completed" })
+        .then((updated) => {
+          state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+          refreshSidebar();
+        })
+        .catch(() => {});
+    } else if (task.status === "completed" && active) {
+      // Output resumed — mark running
+      invoke<Task>("update_task_status", { taskId, status: "running" })
+        .then((updated) => {
+          state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+          refreshSidebar();
+        })
+        .catch(() => {});
+    }
+  }
+}, 3000);
+
 async function init(): Promise<void> {
   await initTheme();
   await Promise.all([refresh(), loadCodeFontSettings()]);
   await loadPersistedState();
-  render();
+
+  // If no task is selected after loading, auto-spawn in the current project
+  if (state.selectedTaskId === null && state.projects.length > 0) {
+    const projectId = state.selectedProjectId ?? state.projects[0].id;
+    await autoSpawnNewTask(projectId);
+  } else {
+    render();
+  }
 }
 
 init();

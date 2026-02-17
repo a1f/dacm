@@ -366,6 +366,30 @@ body {
   margin-left: auto;
 }
 
+.task-archive-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 0.1rem;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.task-row:hover .task-archive-btn {
+  opacity: 1;
+}
+
+.task-archive-btn:hover {
+  color: var(--red);
+  background: var(--red-bg);
+}
+
 /* Context menu (right-click) */
 .context-menu {
   position: fixed;
@@ -741,8 +765,17 @@ body {
   font-weight: 700;
 }
 
+.status-idle {
+  background: transparent;
+  border: 1.5px solid var(--orange);
+}
+
 .status-completed {
   background: var(--green);
+}
+
+.status-failed {
+  background: var(--red);
 }
 
 @keyframes pulse {
@@ -1248,4 +1281,27 @@ body {
 
 .btn-kill-debug:hover:not(:disabled) {
   background: var(--red-bg-strong);
+}
+
+/* Performance overlay (Ctrl+Shift+P) */
+#perf-overlay {
+  position: fixed;
+  top: 6px;
+  right: 8px;
+  z-index: 9999;
+  display: none;
+  gap: 0.6rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 0.65rem;
+  line-height: 1;
+  color: #68d391;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+.perf-line {
+  white-space: nowrap;
 }

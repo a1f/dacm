@@ -18,3 +18,4 @@ libsqlite3-sys = { version = "0.30", features = ["bundled"] }
 portable-pty = "0.9"
 uuid = { version = "1", features = ["v4"] }
 rand = "0.8"
+sysinfo = "0.33"

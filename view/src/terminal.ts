@@ -16,6 +16,9 @@ export interface TerminalSession {
 // Sessions whose PTY stream has already been started (reader taken)
 const startedStreams = new Set<string>();
 
+// Track last output time per session for activity detection
+const lastOutputTimes = new Map<string, number>();
+
 // Track live terminals for theme updates
 const activeTerminals = new Set<Terminal>();
 
@@ -32,6 +35,17 @@ export function markStreamStarted(sessionId: string): void {
 
 export function clearStream(sessionId: string): void {
   startedStreams.delete(sessionId);
+  lastOutputTimes.delete(sessionId);
+}
+
+export function isSessionActive(sessionId: string, thresholdMs = 3000): boolean {
+  const last = lastOutputTimes.get(sessionId);
+  if (last === undefined) return false;
+  return Date.now() - last < thresholdMs;
+}
+
+export function hasReceivedOutput(sessionId: string): boolean {
+  return lastOutputTimes.has(sessionId);
 }
 
 export async function createTerminalSession(
@@ -55,7 +69,7 @@ export async function createTerminalSession(
     fontFamily,
     fontSize,
     lineHeight: 1.2,
-    scrollback: 50_000,
+    scrollback: 5_000,
     theme: getTerminalTheme(),
   });
 
@@ -70,6 +84,7 @@ export async function createTerminalSession(
   const unlistenOutput = await listen<number[]>(
     `session-output-${sessionId}`,
     (event) => {
+      lastOutputTimes.set(sessionId, Date.now());
       const bytes = new Uint8Array(event.payload);
       const text = decoder.decode(bytes, { stream: true });
       terminal.write(text);

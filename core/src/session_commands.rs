@@ -119,4 +119,8 @@ fn stream_pty_output(
     let exit_event = format!("session-exit-{session_id}");
     let _ = app_handle.emit(&exit_event, ());
     eprintln!("[stream {session_id}] Exit event emitted");
+
+    // Free PTY handles (master, writer, child) now that the stream is done
+    let _ = session_mgr.remove(session_id);
+    eprintln!("[stream {session_id}] Session removed from manager");
 }

@@ -5,7 +5,7 @@ export interface Project {
   created_at: string;
 }
 
-export type TaskStatus = "running" | "waiting" | "completed" | "archived";
+export type TaskStatus = "running" | "waiting" | "completed" | "failed" | "archived";
 
 export interface Task {
   id: number;
@@ -47,6 +47,15 @@ export interface SessionInfo {
   started_at_epoch: number;
   status: SessionStatus;
   working_dir: string;
+}
+
+export interface SystemStats {
+  cpu_usage: number;
+  memory_used_mb: number;
+  memory_total_mb: number;
+  memory_percent: number;
+  child_memory_mb: number;
+  child_count: number;
 }
 
 // --- Model / Interface types ---

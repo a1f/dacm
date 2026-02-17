@@ -8,6 +8,7 @@ mod schema;
 mod session;
 mod session_commands;
 mod settings_commands;
+mod system_commands;
 mod settings_models;
 mod sleep_commands;
 mod task_commands;
@@ -55,6 +56,7 @@ fn main() {
             sleep_commands::set_prevent_sleep,
             task_commands::list_archived_tasks,
             task_commands::delete_task,
+            system_commands::get_system_stats,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

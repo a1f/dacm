@@ -222,13 +222,23 @@ impl SessionManager {
         }
     }
 
-    #[allow(dead_code)]
     pub fn remove(&self, session_id: &str) -> Result<(), String> {
         let mut sessions = self.sessions.lock().map_err(|e| e.to_string())?;
         sessions
             .remove(session_id)
             .ok_or_else(|| format!("Session not found: {session_id}"))?;
         Ok(())
+    }
+
+    pub fn get_pids(&self) -> Vec<u32> {
+        let sessions = match self.sessions.lock() {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+        sessions
+            .values()
+            .filter_map(|h| h.pid)
+            .collect()
     }
 
     pub fn list(&self) -> Result<Vec<SessionInfo>, String> {
