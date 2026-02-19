@@ -178,7 +178,7 @@ async function spawnSessionForTask(task: Task): Promise<void> {
     });
     state.activeSessions.set(task.id, sessionId);
 
-    // When this session exits, clean up and update task status
+    // When this session exits, clean up and archive the task
     const unlisten = await listen<void>(`session-exit-${sessionId}`, async () => {
       // Deregister this listener
       const unsub = state.sessionUnlisteners.get(task.id);
@@ -190,13 +190,14 @@ async function spawnSessionForTask(task: Task): Promise<void> {
       clearStream(sessionId);
 
       try {
-        const updated = await invoke<Task>("update_task_status", {
-          taskId: task.id,
-          status: "completed",
-        });
-        state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+        await invoke<Task>("archive_task", { taskId: task.id });
       } catch (_e) {
         // Task may have been archived already
+      }
+      state.tasks = state.tasks.filter((t) => t.id !== task.id);
+      if (state.selectedTaskId === task.id) {
+        const siblings = state.tasks.filter((t) => t.project_id === task.project_id);
+        state.selectedTaskId = siblings[0]?.id ?? null;
       }
       render();
     });
@@ -235,14 +236,19 @@ async function killSessionForTask(taskId: number): Promise<void> {
   state.activeSessions.delete(taskId);
   clearStream(sessionId);
 
+  // Archive the task so it disappears from the sidebar and debug panel
+  const archivedProjectId = state.tasks.find((t) => t.id === taskId)?.project_id;
   try {
-    const updated = await invoke<Task>("update_task_status", {
-      taskId,
-      status: "waiting",
-    });
-    state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+    await invoke<Task>("archive_task", { taskId });
   } catch (e) {
-    console.error("Failed to update task status:", e);
+    console.error("Failed to archive task:", e);
+  }
+  state.tasks = state.tasks.filter((t) => t.id !== taskId);
+  if (state.selectedTaskId === taskId) {
+    const siblings = archivedProjectId
+      ? state.tasks.filter((t) => t.project_id === archivedProjectId)
+      : [];
+    state.selectedTaskId = siblings[0]?.id ?? null;
   }
 }
 
@@ -417,16 +423,15 @@ function render() {
         render();
       },
       async onKillSession(sessionId: string) {
-        try {
-          await invoke("kill_session", { sessionId });
-        } catch (e) {
-          console.error("Failed to kill session:", e);
-        }
+        let targetTaskId: number | null = null;
         for (const [taskId, sid] of state.activeSessions) {
           if (sid === sessionId) {
-            state.activeSessions.delete(taskId);
+            targetTaskId = taskId;
             break;
           }
+        }
+        if (targetTaskId !== null) {
+          await killSessionForTask(targetTaskId);
         }
         render();
       },

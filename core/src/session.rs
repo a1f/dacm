@@ -241,6 +241,17 @@ impl SessionManager {
             .collect()
     }
 
+    pub fn running_count(&self) -> u32 {
+        let sessions = match self.sessions.lock() {
+            Ok(s) => s,
+            Err(_) => return 0,
+        };
+        sessions
+            .values()
+            .filter(|h| h.status == SessionStatus::Running)
+            .count() as u32
+    }
+
     pub fn list(&self) -> Result<Vec<SessionInfo>, String> {
         let sessions = self.sessions.lock().map_err(|e| e.to_string())?;
         let infos = sessions

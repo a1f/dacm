@@ -35,13 +35,12 @@ pub fn get_system_stats(session_mgr: State<'_, SessionManager>) -> Result<System
     sys.refresh_processes(ProcessesToUpdate::Some(&pids_to_update), true);
 
     let mut child_memory_bytes: u64 = 0;
-    let mut child_count: u32 = 0;
     for &pid in &child_pids {
         if let Some(proc) = sys.process(Pid::from_u32(pid)) {
             child_memory_bytes += proc.memory();
-            child_count += 1;
         }
     }
+    let child_count = session_mgr.running_count();
 
     // Global CPU usage requires two snapshots — just use system-wide load average
     let load = System::load_average();

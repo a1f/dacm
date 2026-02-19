@@ -81,9 +81,10 @@ textarea {
   transition: none;
 }
 
-body {
+html, body {
   margin: 0;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   color: var(--text);
   background-color: var(--bg);
 }
@@ -959,6 +960,7 @@ body {
 .terminal-container {
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
 }
 
 /* Terminal status bar — bottom bar with mode, model, context, branch */
@@ -987,12 +989,12 @@ body {
 .statusbar-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.15rem 0.45rem;
-  border-radius: 3px;
+  gap: 0.3rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 4px;
   background: var(--input-bg);
   color: var(--text-muted);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-family: inherit;
   border: none;
   cursor: pointer;
@@ -1135,7 +1137,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 0.75rem;
-  height: 32px;
+  height: 36px;
   background: var(--sidebar-bg);
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
