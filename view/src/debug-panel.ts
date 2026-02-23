@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task } from "./types.ts";
+import type { Project } from "./types.ts";
 import type { SessionInfo } from "./types.ts";
 import { escapeHtml } from "./utils.ts";
 
 export interface DebugPanelCallbacks {
   onClose: () => void;
   onKillSession: (sessionId: string) => void;
-  onGoToTask: (taskId: number) => void;
+  onGoToProject: (projectId: number) => void;
 }
 
 function formatUptime(secs: number): string {
@@ -30,7 +30,7 @@ function formatStartTime(epochSecs: number): string {
 
 export function renderDebugPanel(
   container: HTMLElement,
-  tasks: Task[],
+  projects: Project[],
   callbacks: DebugPanelCallbacks,
 ): void {
   container.innerHTML = `
@@ -46,7 +46,7 @@ export function renderDebugPanel(
     </div>`;
 
   const body = container.querySelector("#debug-body") as HTMLElement;
-  const taskMap = new Map(tasks.map((t) => [t.id, t]));
+  const projectMap = new Map(projects.map((p) => [p.id, p]));
 
   async function loadSessions() {
     try {
@@ -58,17 +58,17 @@ export function renderDebugPanel(
       }
 
       const rows = sessions.map((s) => {
-        const task = taskMap.get(s.task_id);
-        const taskName = task ? escapeHtml(task.name) : `#${s.task_id}`;
+        const project = projectMap.get(s.project_id);
+        const projectName = project ? escapeHtml(project.name) : `#${s.project_id}`;
         return `
         <tr>
           <td>${s.pid ?? "—"}</td>
           <td class="debug-mono">${escapeHtml(s.working_dir)}</td>
-          <td>${taskName}</td>
+          <td>${projectName}</td>
           <td>${formatStartTime(s.started_at_epoch)}</td>
           <td>${formatUptime(s.uptime_secs)}</td>
           <td>
-            <button class="btn btn-goto-debug" data-task-id="${s.task_id}">Go to</button>
+            <button class="btn btn-goto-debug" data-project-id="${s.project_id}">Go to</button>
             <button class="btn btn-kill-debug" data-session-id="${s.session_id}">Kill</button>
           </td>
         </tr>`;
@@ -76,7 +76,7 @@ export function renderDebugPanel(
 
       body.innerHTML = `
         <table class="debug-table">
-          <thead><tr><th>PID</th><th>Working Dir</th><th>Task</th><th>Started</th><th>Uptime</th><th></th></tr></thead>
+          <thead><tr><th>PID</th><th>Working Dir</th><th>Project</th><th>Started</th><th>Uptime</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
 
@@ -89,8 +89,8 @@ export function renderDebugPanel(
 
       body.querySelectorAll(".btn-goto-debug").forEach((btn) => {
         btn.addEventListener("click", () => {
-          const taskId = Number((btn as HTMLElement).dataset.taskId!);
-          callbacks.onGoToTask(taskId);
+          const projectId = Number((btn as HTMLElement).dataset.projectId!);
+          callbacks.onGoToProject(projectId);
         });
       });
     } catch (e) {

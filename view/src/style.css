@@ -144,7 +144,7 @@ html, body {
   padding: 0 0.75rem 0.25rem;
 }
 
-/* Top section: New task button */
+/* Top section: New project button */
 .sidebar-top {
   padding: 0.25rem 0.75rem 0.5rem;
   flex-shrink: 0;
@@ -261,12 +261,12 @@ html, body {
   margin: 0.25rem 0;
 }
 
-/* Project Groups — tree view */
-.project-group {
+/* Workspace Groups — tree view */
+.workspace-group {
   margin-bottom: 0.125rem;
 }
 
-.project-group-header {
+.workspace-group-header {
   padding: 0.35rem 0.5rem;
   display: flex;
   align-items: center;
@@ -277,7 +277,7 @@ html, body {
   transition: background 0.15s;
 }
 
-.project-group-header:hover {
+.workspace-group-header:hover {
   background: var(--hover-bg);
 }
 
@@ -297,7 +297,7 @@ html, body {
   color: var(--text-muted);
 }
 
-.project-group-name {
+.workspace-group-name {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text);
@@ -307,7 +307,7 @@ html, body {
   flex: 1;
 }
 
-.project-add-task-btn {
+.workspace-add-project-btn {
   background: transparent;
   border: none;
   color: var(--text-faint);
@@ -323,17 +323,17 @@ html, body {
   margin-left: auto;
 }
 
-.project-group-header:hover .project-add-task-btn {
+.workspace-group-header:hover .workspace-add-project-btn {
   opacity: 1;
 }
 
-.project-add-task-btn:hover {
+.workspace-add-project-btn:hover {
   color: var(--accent);
   background: var(--hover-bg);
 }
 
-/* Task Rows — indented under project */
-.task-row {
+/* Project Rows — indented under workspace */
+.project-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -344,15 +344,15 @@ html, body {
   margin: 0 0.35rem;
 }
 
-.task-row:hover {
+.project-row:hover {
   background: var(--hover-bg);
 }
 
-.task-row--selected {
+.project-row--selected {
   background: var(--selected-bg);
 }
 
-.task-name {
+.project-name {
   font-size: 0.8rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -360,7 +360,7 @@ html, body {
   flex: 1;
 }
 
-.task-name-input {
+.project-name-input {
   font-size: 0.8rem;
   font-family: inherit;
   color: var(--text);
@@ -373,14 +373,14 @@ html, body {
   min-width: 0;
 }
 
-.task-age {
+.project-age {
   font-size: 0.7rem;
   color: var(--text-faint);
   flex-shrink: 0;
   margin-left: auto;
 }
 
-.task-archive-btn {
+.project-archive-btn {
   background: transparent;
   border: none;
   color: var(--text-faint);
@@ -395,11 +395,11 @@ html, body {
   transition: opacity 0.15s, color 0.15s;
 }
 
-.task-row:hover .task-archive-btn {
+.project-row:hover .project-archive-btn {
   opacity: 1;
 }
 
-.task-archive-btn:hover {
+.project-archive-btn:hover {
   color: var(--red);
   background: var(--red-bg);
 }
@@ -705,14 +705,14 @@ html, body {
   text-align: center;
 }
 
-/* Archived task list */
-.archived-task-list {
+/* Archived project list */
+.archived-project-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.archived-task-row {
+.archived-project-row {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -722,12 +722,12 @@ html, body {
   border-radius: 6px;
 }
 
-.archived-task-info {
+.archived-project-info {
   flex: 1;
   min-width: 0;
 }
 
-.archived-task-name {
+.archived-project-name {
   font-size: 0.85rem;
   color: var(--text);
   overflow: hidden;
@@ -735,13 +735,13 @@ html, body {
   white-space: nowrap;
 }
 
-.archived-task-meta {
+.archived-project-meta {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.15rem;
 }
 
-.archived-task-actions {
+.archived-project-actions {
   display: flex;
   gap: 0.35rem;
   flex-shrink: 0;
@@ -882,7 +882,7 @@ html, body {
   flex-wrap: wrap;
 }
 
-/* Form elements (still used in task detail) */
+/* Form elements (still used in project detail) */
 .form-input,
 .form-select,
 .form-textarea {
@@ -1150,7 +1150,7 @@ html, body {
   gap: 0.4rem;
 }
 
-.toolbar-project-btn {
+.toolbar-workspace-btn {
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;

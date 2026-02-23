@@ -1,8 +1,8 @@
 import { test, expect } from "./fixtures.ts";
-import { getMainContent, getTaskRowByName } from "./helpers.ts";
+import { getMainContent, getProjectRowByName } from "./helpers.ts";
 
 test.describe("Integration Flows", () => {
-  test("full flow: prompt -> task created -> detail view", async ({ dacmPage }) => {
+  test("full flow: prompt -> project created -> detail view", async ({ dacmPage }) => {
     const main = getMainContent(dacmPage);
 
     // Start page visible
@@ -13,11 +13,11 @@ test.describe("Integration Flows", () => {
     await input.fill("Implement user registration");
     await input.press("Enter");
 
-    // Start page should disappear, task detail or terminal should appear
+    // Start page should disappear, project detail or terminal should appear
     await expect(main.locator(".start-page")).not.toBeVisible({ timeout: 3000 });
 
-    // New task should appear in sidebar
-    await expect(getTaskRowByName(dacmPage, "Implement user registration")).toBeVisible();
+    // New project should appear in sidebar
+    await expect(getProjectRowByName(dacmPage, "Implement user registration")).toBeVisible();
   });
 
   test("open settings -> change theme -> back -> theme persists", async ({ dacmPage }) => {
@@ -78,10 +78,10 @@ test.describe("Integration Flows", () => {
     expect(widthAfter).toBe(280);
   });
 
-  test("task selection -> archive -> returns to start page", async ({ dacmPage }) => {
-    // Select a task
-    await getTaskRowByName(dacmPage, "Fix pagination bug").click();
-    await expect(dacmPage.locator(".task-detail-name")).toHaveText("Fix pagination bug");
+  test("project selection -> archive -> returns to start page", async ({ dacmPage }) => {
+    // Select a project
+    await getProjectRowByName(dacmPage, "Fix pagination bug").click();
+    await expect(dacmPage.locator(".project-detail-name")).toHaveText("Fix pagination bug");
 
     // Archive it
     dacmPage.on("dialog", (dialog) => dialog.accept());
@@ -89,14 +89,14 @@ test.describe("Integration Flows", () => {
 
     // Should return to start page
     await expect(dacmPage.locator(".start-page")).toBeVisible({ timeout: 3000 });
-    // Task should be gone from sidebar
-    await expect(getTaskRowByName(dacmPage, "Fix pagination bug")).toHaveCount(0);
+    // Project should be gone from sidebar
+    await expect(getProjectRowByName(dacmPage, "Fix pagination bug")).toHaveCount(0);
   });
 
-  test("keyboard: Cmd+N deselects task and shows start page", async ({ dacmPage }) => {
-    // Select a task
-    await getTaskRowByName(dacmPage, "Fix pagination bug").click();
-    await expect(dacmPage.locator(".task-detail-name")).toBeVisible();
+  test("keyboard: Cmd+N deselects project and shows start page", async ({ dacmPage }) => {
+    // Select a project
+    await getProjectRowByName(dacmPage, "Fix pagination bug").click();
+    await expect(dacmPage.locator(".project-detail-name")).toBeVisible();
 
     // Press Cmd+N
     await dacmPage.keyboard.press("Meta+n");
@@ -105,10 +105,10 @@ test.describe("Integration Flows", () => {
     await expect(dacmPage.locator(".start-page")).toBeVisible({ timeout: 3000 });
   });
 
-  test("keyboard: Escape deselects task", async ({ dacmPage }) => {
-    // Select a task
-    await getTaskRowByName(dacmPage, "Fix pagination bug").click();
-    await expect(dacmPage.locator(".task-detail-name")).toBeVisible();
+  test("keyboard: Escape deselects project", async ({ dacmPage }) => {
+    // Select a project
+    await getProjectRowByName(dacmPage, "Fix pagination bug").click();
+    await expect(dacmPage.locator(".project-detail-name")).toBeVisible();
 
     // Press Escape
     await dacmPage.keyboard.press("Escape");

@@ -23,7 +23,7 @@ test.describe("Worktree Settings", () => {
   test("branch pattern input has default value", async ({ dacmPage }) => {
     await openWorktreeSettings(dacmPage);
     const val = await dacmPage.locator("#worktree-branch-pattern").inputValue();
-    expect(val).toBe("feature/{task_name}");
+    expect(val).toBe("feature/{project_name}");
   });
 
   test("base path input persists value via mock", async ({ dacmPage }) => {
@@ -42,12 +42,12 @@ test.describe("Worktree Settings", () => {
   test("branch pattern input persists value via mock", async ({ dacmPage }) => {
     await openWorktreeSettings(dacmPage);
 
-    await dacmPage.locator("#worktree-branch-pattern").fill("task/{task_name}");
+    await dacmPage.locator("#worktree-branch-pattern").fill("project/{project_name}");
     await dacmPage.locator("#worktree-branch-pattern").dispatchEvent("change");
 
     const val = await dacmPage.evaluate(() =>
       (window as any).__MOCK_STATE__.settings.find((s: any) => s.key === "worktree_branch_pattern")?.value,
     );
-    expect(val).toBe("task/{task_name}");
+    expect(val).toBe("project/{project_name}");
   });
 });

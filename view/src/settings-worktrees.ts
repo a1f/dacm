@@ -11,7 +11,7 @@ async function loadSetting(key: string, fallback: string): Promise<string> {
 export async function renderWorktreeSettings(container: HTMLElement): Promise<void> {
   const [basePath, branchPattern] = await Promise.all([
     loadSetting("worktree_base_path", ""),
-    loadSetting("worktree_branch_pattern", "feature/{task_name}"),
+    loadSetting("worktree_branch_pattern", "feature/{project_name}"),
   ]);
 
   container.innerHTML = `
@@ -30,9 +30,9 @@ export async function renderWorktreeSettings(container: HTMLElement): Promise<vo
         <div class="settings-row">
           <div>
             <div class="settings-row-label">Branch pattern</div>
-            <div class="settings-row-sublabel">Use {task_name} as placeholder</div>
+            <div class="settings-row-sublabel">Use {project_name} as placeholder</div>
           </div>
-          <input type="text" class="settings-input" id="worktree-branch-pattern" value="${escapeAttr(branchPattern)}" placeholder="feature/{task_name}" />
+          <input type="text" class="settings-input" id="worktree-branch-pattern" value="${escapeAttr(branchPattern)}" placeholder="feature/{project_name}" />
         </div>
       </div>
     </div>`;

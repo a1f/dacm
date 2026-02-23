@@ -6,6 +6,12 @@ DACM (Desktop Agentic Coding Manager) is a Tauri 2 desktop application for manag
 
 **Current stage**: Early MVP (v0.1.0). No tests or CI/CD yet.
 
+**Active work:** See `plans/CURRENT.md` for the current phase being implemented. See `plans/PLAN_FEATURE.md` for the full feature design doc (Plan Mode — 6 phases). Always read `plans/CURRENT.md` before starting work to understand what step is active and what has been completed.
+
+**Entity naming:**
+- **Workspace** = a folder/repo path (the top-level grouping)
+- **Project** = a unit of work with a Claude session (lives under a Workspace)
+
 ## Repository Structure
 
 ```
@@ -14,10 +20,10 @@ dacm/
 │   ├── src/
 │   │   ├── main.rs         # App entry, plugin/command registration
 │   │   ├── db.rs           # Database initialization (SQLite + Diesel)
-│   │   ├── models.rs       # Project data models (Queryable/Insertable)
-│   │   ├── task_models.rs  # Task data models
-│   │   ├── commands.rs     # Tauri commands for project management
-│   │   ├── task_commands.rs# Tauri commands for task management
+│   │   ├── models.rs       # Workspace data models (Queryable/Insertable)
+│   │   ├── project_models.rs # Project data models
+│   │   ├── workspace_commands.rs # Tauri commands for workspace management
+│   │   ├── project_commands.rs   # Tauri commands for project management
 │   │   ├── session.rs      # Session manager (PTY lifecycle, in-memory)
 │   │   ├── session_commands.rs # Tauri commands for session management
 │   │   └── schema.rs       # Auto-generated Diesel schema (DO NOT EDIT)
@@ -29,8 +35,8 @@ dacm/
 ├── view/                   # TypeScript frontend (Vite)
 │   ├── src/
 │   │   ├── main.ts         # App state management & orchestration
-│   │   ├── sidebar.ts      # Sidebar UI (project groups, task list)
-│   │   ├── task-detail.ts  # Task detail panel, terminal mode & new task form
+│   │   ├── sidebar.ts      # Sidebar UI (workspace groups, project list)
+│   │   ├── project-detail.ts # Project detail panel, terminal mode
 │   │   ├── terminal.ts     # xterm.js wrapper + Tauri event bridge
 │   │   ├── debug-panel.ts  # Debug view for active sessions (Ctrl+Shift+D)
 │   │   ├── types.ts        # TypeScript type definitions
@@ -93,9 +99,9 @@ cd view && npx tsc --noEmit
 - **No framework**: Vanilla TypeScript with direct DOM manipulation
 - **IPC**: Uses `@tauri-apps/api` (`invoke` for commands, `listen` for events)
 - **Terminal**: xterm.js (`@xterm/xterm` + `@xterm/addon-fit`) renders PTY output; `terminal.ts` bridges xterm events to Tauri session commands
-- **Terminal lifecycle**: `task-detail.ts` tracks a module-level `activeTerminal` and skips re-render when the session hasn't changed (preserves terminal state across sidebar interactions)
+- **Terminal lifecycle**: `project-detail.ts` tracks a module-level `activeTerminal` and skips re-render when the session hasn't changed (preserves terminal state across sidebar interactions)
 - **XSS protection**: All user-supplied text rendered via `escapeHtml()` helper
-- **Event delegation**: Used for dynamically created elements (task lists, status buttons)
+- **Event delegation**: Used for dynamically created elements (project lists, status buttons)
 - **Module structure**: Each file exports render/update functions consumed by `main.ts`
 - **Debug mode**: `Ctrl+Shift+D` toggles a debug panel showing all active sessions with kill buttons
 
@@ -103,8 +109,8 @@ cd view && npx tsc --noEmit
 
 - **Engine**: SQLite (bundled via `libsqlite3-sys`)
 - **ORM**: Diesel 2 with compile-time query checking
-- **Tables**: `projects` (id, name, path, created_at) and `tasks` (id, name, description, summary, task_id, project_id, status, start_time, iteration_count, worktree_path, branch_name, created_at)
-- **Task statuses**: `running`, `waiting`, `completed`, `archived`
+- **Tables**: `workspaces` (id, name, path, created_at) and `projects` (id, name, description, summary, task_id, workspace_id, status, start_time, iteration_count, worktree_path, branch_name, created_at)
+- **Project statuses**: `running`, `waiting`, `completed`, `archived`
 
 ## Code Conventions
 
@@ -131,15 +137,15 @@ cd view && npx tsc --noEmit
 | `core/tauri.conf.json` | App identity, build commands, window config |
 | `core/capabilities/default.json` | Tauri security permissions |
 | `view/src/terminal.ts` | xterm.js wrapper — bridges PTY events to/from frontend |
-| `view/src/task-detail.ts` | Terminal mode (active session) vs static detail view |
+| `view/src/project-detail.ts` | Terminal mode (active session) vs static detail view |
 | `view/src/types.ts` | Shared TypeScript interfaces (must match Rust models) |
 | `docs/PRODUCT_SPEC.md` | Product vision and feature roadmap |
 
 ## Things to Watch Out For
 
 - **schema.rs is auto-generated**: If you change migrations, run `diesel migration run` to update it. Do not edit by hand.
-- **Frontend types must match Rust structs**: `view/src/types.ts` interfaces must stay in sync with the serde-serialized Rust models in `models.rs`, `task_models.rs`, and `session.rs` (`SessionInfo`).
-- **Sessions are ephemeral**: `SessionManager` is in-memory only. PTY handles cannot be serialized. On app restart, all sessions are gone. Task status in the DB should be updated separately when sessions start/end.
+- **Frontend types must match Rust structs**: `view/src/types.ts` interfaces must stay in sync with the serde-serialized Rust models in `models.rs`, `project_models.rs`, and `session.rs` (`SessionInfo`).
+- **Sessions are ephemeral**: `SessionManager` is in-memory only. PTY handles cannot be serialized. On app restart, all sessions are gone. Project status in the DB should be updated separately when sessions start/end.
 - **Single DB connection**: The app uses a single `Mutex<SqliteConnection>`. All DB access is synchronous and serialized — this is intentional for SQLite.
 - **No test infrastructure yet**: Tests are planned but not implemented. When adding features, keep testability in mind.
 - **Tauri security capabilities**: New Tauri plugin permissions must be declared in `core/capabilities/default.json`.

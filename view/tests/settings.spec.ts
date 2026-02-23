@@ -35,10 +35,10 @@ test.describe("Settings Navigation", () => {
     await expect(dacmPage.locator(".settings-page-title")).toHaveText("General");
   });
 
-  test("back button returns to tasks view", async ({ dacmPage }) => {
+  test("back button returns to projects view", async ({ dacmPage }) => {
     await openSettings(dacmPage);
     await dacmPage.locator(".settings-nav-back").click();
-    // Should show start page (no task selected)
+    // Should show start page (no project selected)
     await expect(dacmPage.locator(".start-page-title")).toBeVisible();
   });
 

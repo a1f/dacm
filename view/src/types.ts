@@ -1,20 +1,20 @@
-export interface Project {
+export interface Workspace {
   id: number;
   name: string;
   path: string;
   created_at: string;
 }
 
-export type TaskStatus = "running" | "waiting" | "completed" | "failed" | "archived";
+export type ProjectStatus = "running" | "waiting" | "completed" | "failed" | "archived";
 
-export interface Task {
+export interface Project {
   id: number;
   name: string;
   description: string;
   summary: string;
   task_id: string | null;
-  project_id: number;
-  status: TaskStatus;
+  workspace_id: number;
+  status: ProjectStatus;
   start_time: string | null;
   iteration_count: number;
   worktree_path: string | null;
@@ -22,9 +22,9 @@ export interface Task {
   created_at: string;
 }
 
-export interface TaskStatusChangedEvent {
-  task_id: number;
-  status: TaskStatus;
+export interface ProjectStatusChangedEvent {
+  project_id: number;
+  status: ProjectStatus;
 }
 
 export type SessionStatus = "running" | "exited";
@@ -40,8 +40,8 @@ export type SettingsPage = "general" | "worktrees" | "archived";
 
 export interface SessionInfo {
   session_id: string;
-  task_id: number;
   project_id: number;
+  workspace_id: number;
   pid: number | null;
   uptime_secs: number;
   started_at_epoch: number;

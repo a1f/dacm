@@ -10,7 +10,7 @@ test.describe("Layout Redesign", () => {
   test("new thread button is present at top", async ({ dacmPage }) => {
     const btn = dacmPage.locator("#new-thread-btn");
     await expect(btn).toBeVisible();
-    await expect(btn).toContainText("New task");
+    await expect(btn).toContainText("New project");
   });
 
   test("gear icon is at bottom of sidebar", async ({ dacmPage }) => {
@@ -22,20 +22,20 @@ test.describe("Layout Redesign", () => {
     await expect(parent).toBeVisible();
   });
 
-  test("tree chevrons are visible on project headers", async ({ dacmPage }) => {
-    const chevrons = dacmPage.locator(".project-group-header .tree-chevron");
+  test("tree chevrons are visible on workspace headers", async ({ dacmPage }) => {
+    const chevrons = dacmPage.locator(".workspace-group-header .tree-chevron");
     const count = await chevrons.count();
     expect(count).toBe(3);
   });
 
-  test("folder icons are visible on project headers", async ({ dacmPage }) => {
-    const icons = dacmPage.locator(".project-group-header .tree-folder-icon");
+  test("folder icons are visible on workspace headers", async ({ dacmPage }) => {
+    const icons = dacmPage.locator(".workspace-group-header .tree-folder-icon");
     const count = await icons.count();
     expect(count).toBe(3);
   });
 
-  test("age labels render on task rows", async ({ dacmPage }) => {
-    const ages = dacmPage.locator(".task-age");
+  test("age labels render on project rows", async ({ dacmPage }) => {
+    const ages = dacmPage.locator(".project-age");
     const count = await ages.count();
     expect(count).toBeGreaterThan(0);
 
@@ -77,8 +77,8 @@ test.describe("Layout Redesign", () => {
     await expect(sidebar).not.toHaveClass(/sidebar--collapsed/);
   });
 
-  test("right-click on project shows context menu", async ({ dacmPage }) => {
-    const header = dacmPage.locator(".project-group-header").first();
+  test("right-click on workspace shows context menu", async ({ dacmPage }) => {
+    const header = dacmPage.locator(".workspace-group-header").first();
     await header.click({ button: "right" });
     await expect(dacmPage.locator(".context-menu")).toBeVisible();
     await expect(dacmPage.locator(".context-menu-item")).toContainText("Remove");

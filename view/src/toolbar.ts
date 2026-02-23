@@ -1,18 +1,18 @@
-import type { Project, CodingInterface } from "./types.ts";
+import type { Workspace, CodingInterface } from "./types.ts";
 import { AVAILABLE_MODELS } from "./constants.ts";
 import { escapeHtml } from "./utils.ts";
 
 export interface ToolbarProps {
   selectedModelId: string;
-  selectedProject: Project | null;
-  projects: Project[];
+  selectedWorkspace: Workspace | null;
+  workspaces: Workspace[];
   branchName: string | null;
 }
 
 export interface ToolbarCallbacks {
   onModelChange: (modelId: string) => void;
-  onProjectChange: (projectId: number) => void;
-  onAddProject: () => void;
+  onWorkspaceChange: (workspaceId: number) => void;
+  onAddWorkspace: () => void;
 }
 
 const CHEVRON_DOWN = `<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>`;
@@ -61,7 +61,6 @@ function openInterfaceDropdown(anchor: HTMLElement, selectedModelId: string, onS
     if (group.interface === currentInterface) item.classList.add("toolbar-dropdown-item--active");
     item.innerHTML = `<span>${escapeHtml(group.label)}</span>${group.interface === currentInterface ? '<span class="toolbar-dropdown-check">&#10003;</span>' : ""}`;
     item.addEventListener("click", () => {
-      // Select first model in the chosen interface group
       onSelect(group.models[0].id);
       closeDropdown();
     });
@@ -106,19 +105,19 @@ function openModelDropdown(anchor: HTMLElement, selectedModelId: string, onSelec
   }, 0);
 }
 
-function openProjectDropdown(anchor: HTMLElement, projects: Project[], selectedId: number | null, callbacks: ToolbarCallbacks): void {
+function openWorkspaceDropdown(anchor: HTMLElement, workspaces: Workspace[], selectedId: number | null, callbacks: ToolbarCallbacks): void {
   closeDropdown();
 
   const dropdown = document.createElement("div");
   dropdown.className = "toolbar-dropdown";
 
-  for (const project of projects) {
+  for (const workspace of workspaces) {
     const item = document.createElement("button");
     item.className = "toolbar-dropdown-item";
-    if (project.id === selectedId) item.classList.add("toolbar-dropdown-item--active");
-    item.innerHTML = `${FOLDER_ICON} <span>${escapeHtml(project.name)}</span>${project.id === selectedId ? '<span class="toolbar-dropdown-check">&#10003;</span>' : ""}`;
+    if (workspace.id === selectedId) item.classList.add("toolbar-dropdown-item--active");
+    item.innerHTML = `${FOLDER_ICON} <span>${escapeHtml(workspace.name)}</span>${workspace.id === selectedId ? '<span class="toolbar-dropdown-check">&#10003;</span>' : ""}`;
     item.addEventListener("click", () => {
-      callbacks.onProjectChange(project.id);
+      callbacks.onWorkspaceChange(workspace.id);
       closeDropdown();
     });
     dropdown.appendChild(item);
@@ -130,9 +129,9 @@ function openProjectDropdown(anchor: HTMLElement, projects: Project[], selectedI
 
   const addItem = document.createElement("button");
   addItem.className = "toolbar-dropdown-item";
-  addItem.textContent = "Add project\u2026";
+  addItem.textContent = "Add workspace\u2026";
   addItem.addEventListener("click", () => {
-    callbacks.onAddProject();
+    callbacks.onAddWorkspace();
     closeDropdown();
   });
   dropdown.appendChild(addItem);
@@ -164,7 +163,7 @@ export function renderToolbar(
   const toolbar = document.createElement("div");
   toolbar.className = "bottom-toolbar";
 
-  const projectName = props.selectedProject ? escapeHtml(props.selectedProject.name) : "No project";
+  const workspaceName = props.selectedWorkspace ? escapeHtml(props.selectedWorkspace.name) : "No workspace";
   const interfaceLabel = getInterfaceLabel(props.selectedModelId);
   const modelLabel = getModelDisplayLabel(props.selectedModelId);
 
@@ -175,7 +174,7 @@ export function renderToolbar(
     </div>
     <div class="bottom-toolbar-right">
       ${props.branchName ? `<span class="statusbar-info">${BRANCH_ICON} ${escapeHtml(props.branchName)}</span>` : ""}
-      <button class="statusbar-chip toolbar-project-btn" id="toolbar-project-btn">${FOLDER_ICON} ${projectName} ${CHEVRON_DOWN}</button>
+      <button class="statusbar-chip toolbar-workspace-btn" id="toolbar-workspace-btn">${FOLDER_ICON} ${workspaceName} ${CHEVRON_DOWN}</button>
     </div>`;
 
   container.appendChild(toolbar);
@@ -190,12 +189,12 @@ export function renderToolbar(
     openModelDropdown(e.currentTarget as HTMLElement, props.selectedModelId, callbacks.onModelChange);
   });
 
-  toolbar.querySelector("#toolbar-project-btn")?.addEventListener("click", (e) => {
+  toolbar.querySelector("#toolbar-workspace-btn")?.addEventListener("click", (e) => {
     e.stopPropagation();
-    openProjectDropdown(
+    openWorkspaceDropdown(
       e.currentTarget as HTMLElement,
-      props.projects,
-      props.selectedProject?.id ?? null,
+      props.workspaces,
+      props.selectedWorkspace?.id ?? null,
       callbacks,
     );
   });

@@ -7,23 +7,23 @@ test.describe("Start Page", () => {
     await expect(main.locator(".start-page-title")).toContainText("What do you want to build?");
   });
 
-  test("shows project picker with first project selected", async ({ dacmPage }) => {
-    await expect(dacmPage.locator("#project-picker-btn")).toBeVisible();
-    await expect(dacmPage.locator(".project-picker-label")).toContainText("web-app");
+  test("shows workspace picker with first workspace selected", async ({ dacmPage }) => {
+    await expect(dacmPage.locator("#workspace-picker-btn")).toBeVisible();
+    await expect(dacmPage.locator(".workspace-picker-label")).toContainText("web-app");
   });
 
-  test("project picker dropdown opens on click", async ({ dacmPage }) => {
-    await dacmPage.locator("#project-picker-btn").click();
-    await expect(dacmPage.locator(".project-picker-dropdown")).toBeVisible();
-    // Should show all 3 projects + add project
-    const items = dacmPage.locator(".project-picker-item");
-    await expect(items).toHaveCount(4); // 3 projects + "Add project"
+  test("workspace picker dropdown opens on click", async ({ dacmPage }) => {
+    await dacmPage.locator("#workspace-picker-btn").click();
+    await expect(dacmPage.locator(".workspace-picker-dropdown")).toBeVisible();
+    // Should show all 3 workspaces + add workspace
+    const items = dacmPage.locator(".workspace-picker-item");
+    await expect(items).toHaveCount(4); // 3 workspaces + "Add workspace"
   });
 
-  test("selecting a project in dropdown updates the label", async ({ dacmPage }) => {
-    await dacmPage.locator("#project-picker-btn").click();
-    await dacmPage.locator(".project-picker-item", { hasText: "api-server" }).click();
-    await expect(dacmPage.locator(".project-picker-label")).toContainText("api-server");
+  test("selecting a workspace in dropdown updates the label", async ({ dacmPage }) => {
+    await dacmPage.locator("#workspace-picker-btn").click();
+    await dacmPage.locator(".workspace-picker-item", { hasText: "api-server" }).click();
+    await expect(dacmPage.locator(".workspace-picker-label")).toContainText("api-server");
   });
 
   test("prompt input is visible and focusable", async ({ dacmPage }) => {
@@ -36,13 +36,13 @@ test.describe("Start Page", () => {
     await expect(dacmPage.locator("#start-page-send")).toBeVisible();
   });
 
-  test("Enter in prompt triggers task creation", async ({ dacmPage }) => {
+  test("Enter in prompt triggers project creation", async ({ dacmPage }) => {
     const input = dacmPage.locator("#start-page-input");
     await input.fill("Build a login page");
     await input.press("Enter");
 
-    // After task creation, the start page should disappear
-    // and task detail or terminal should appear
+    // After project creation, the start page should disappear
+    // and project detail or terminal should appear
     await expect(dacmPage.locator(".start-page")).not.toBeVisible({ timeout: 3000 });
   });
 

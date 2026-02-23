@@ -1,21 +1,21 @@
-import type { Project, Task } from "./types.ts";
+import type { Workspace, Project } from "./types.ts";
 import { setTheme, getEffectiveTheme } from "./theme.ts";
 import type { ThemeMode } from "./types.ts";
 import { escapeHtml, formatAge } from "./utils.ts";
 
 export interface SidebarCallbacks {
-  onTaskSelect: (taskId: number) => void;
-  onRenameTask: (taskId: number, name: string) => void;
+  onProjectSelect: (projectId: number) => void;
+  onRenameProject: (projectId: number, name: string) => void;
   onNewThread: () => void;
-  onNewTaskForProject: (projectId: number) => void;
-  onAddProject: () => void;
-  onRemoveProject: (projectId: number) => void;
-  onArchiveTask: (taskId: number) => void;
+  onNewProjectForWorkspace: (workspaceId: number) => void;
+  onAddWorkspace: () => void;
+  onRemoveWorkspace: (workspaceId: number) => void;
+  onArchiveProject: (projectId: number) => void;
   onToggleSidebar: () => void;
   onOpenSettings: () => void;
 }
 
-const collapsedProjects = new Set<number>();
+const collapsedWorkspaces = new Set<number>();
 
 function statusIndicatorHtml(status: string): string {
   switch (status) {
@@ -62,7 +62,6 @@ function closeAllMenus(): void {
   closeGearMenu();
 }
 
-// Esc key closes any open menu (registered once at module level)
 let escListenerRegistered = false;
 function ensureEscListener(): void {
   if (escListenerRegistered) return;
@@ -81,57 +80,55 @@ const ARCHIVE_ICON = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none
 
 export function renderSidebar(
   container: HTMLElement,
+  workspaces: Workspace[],
   projects: Project[],
-  tasks: Task[],
-  selectedTaskId: number | null,
+  selectedProjectId: number | null,
   callbacks: SidebarCallbacks,
 ): void {
-  // Preserve scroll position across re-renders
   const tree = container.querySelector(".sidebar-tree");
   const scrollTop = tree?.scrollTop ?? 0;
 
-  const tasksByProject = new Map<number, Task[]>();
-  for (const task of tasks) {
-    const list = tasksByProject.get(task.project_id) ?? [];
-    list.push(task);
-    tasksByProject.set(task.project_id, list);
+  const projectsByWorkspace = new Map<number, Project[]>();
+  for (const project of projects) {
+    const list = projectsByWorkspace.get(project.workspace_id) ?? [];
+    list.push(project);
+    projectsByWorkspace.set(project.workspace_id, list);
   }
 
-  // Sort by created_at descending (newest first)
-  for (const [, projectTasks] of tasksByProject) {
-    projectTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  for (const [, workspaceProjects] of projectsByWorkspace) {
+    workspaceProjects.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }
 
-  const projectGroupsHtml = projects
-    .map((project) => {
-      const projectTasks = tasksByProject.get(project.id) ?? [];
-      const isCollapsed = collapsedProjects.has(project.id);
+  const workspaceGroupsHtml = workspaces
+    .map((workspace) => {
+      const workspaceProjects = projectsByWorkspace.get(workspace.id) ?? [];
+      const isCollapsed = collapsedWorkspaces.has(workspace.id);
 
-      const tasksHtml = isCollapsed
+      const projectsHtml = isCollapsed
         ? ""
-        : projectTasks
+        : workspaceProjects
             .map(
-              (task) => `
-          <div class="task-row ${task.id === selectedTaskId ? "task-row--selected" : ""}" data-task-id="${task.id}">
-            ${statusIndicatorHtml(task.status)}
-            <span class="task-name">${escapeHtml(task.name)}</span>
-            <span class="task-age">${formatAge(task.created_at)}</span>
-            <button class="task-archive-btn" data-archive-task-id="${task.id}" title="Archive">${ARCHIVE_ICON}</button>
+              (project) => `
+          <div class="project-row ${project.id === selectedProjectId ? "project-row--selected" : ""}" data-project-id="${project.id}">
+            ${statusIndicatorHtml(project.status)}
+            <span class="project-name">${escapeHtml(project.name)}</span>
+            <span class="project-age">${formatAge(project.created_at)}</span>
+            <button class="project-archive-btn" data-archive-project-id="${project.id}" title="Archive">${ARCHIVE_ICON}</button>
           </div>`,
             )
             .join("");
 
       return `
-        <div class="project-group">
-          <div class="project-group-header" data-project-id="${project.id}">
+        <div class="workspace-group">
+          <div class="workspace-group-header" data-workspace-id="${workspace.id}">
             ${isCollapsed ? CHEVRON_RIGHT : CHEVRON_DOWN}
             ${FOLDER_ICON}
-            <span class="project-group-name">${escapeHtml(project.name)}</span>
-            <button class="project-add-task-btn" data-add-task-project-id="${project.id}" title="New task in ${escapeHtml(project.name)}">
+            <span class="workspace-group-name">${escapeHtml(workspace.name)}</span>
+            <button class="workspace-add-project-btn" data-add-project-workspace-id="${workspace.id}" title="New project in ${escapeHtml(workspace.name)}">
               ${SMALL_PLUS_ICON}
             </button>
           </div>
-          ${tasksHtml}
+          ${projectsHtml}
         </div>`;
     })
     .join("");
@@ -147,11 +144,11 @@ export function renderSidebar(
     <div class="sidebar-top">
       <button class="new-thread-btn" id="new-thread-btn">
         ${PLUS_ICON}
-        <span>New task</span>
+        <span>New project</span>
       </button>
     </div>
     <div class="sidebar-tree">
-      ${projectGroupsHtml}
+      ${workspaceGroupsHtml}
     </div>
     <div class="sidebar-bottom">
       <button class="sidebar-gear-btn" id="sidebar-gear-btn" title="Settings">
@@ -159,17 +156,14 @@ export function renderSidebar(
       </button>
     </div>`;
 
-  // New thread button
   container.querySelector("#new-thread-btn")?.addEventListener("click", () => {
     callbacks.onNewThread();
   });
 
-  // Hide sidebar button
   container.querySelector("#sidebar-hide-btn")?.addEventListener("click", () => {
     callbacks.onToggleSidebar();
   });
 
-  // Gear button — opens settings dropdown
   container.querySelector("#sidebar-gear-btn")?.addEventListener("click", (e) => {
     e.stopPropagation();
     if (activeGearMenu) {
@@ -188,7 +182,7 @@ export function renderSidebar(
     const nextTheme: ThemeMode = currentTheme === "dark" ? "light" : "dark";
 
     menu.innerHTML = `
-      <button class="gear-menu-item" data-action="add-project">Add Project</button>
+      <button class="gear-menu-item" data-action="add-workspace">Add Workspace</button>
       <div class="gear-menu-separator"></div>
       <button class="gear-menu-item" data-action="toggle-theme">${themeLabel}</button>
       <button class="gear-menu-item" data-action="settings">Settings</button>`;
@@ -199,9 +193,9 @@ export function renderSidebar(
     document.body.appendChild(menu);
     activeGearMenu = menu;
 
-    menu.querySelector("[data-action='add-project']")?.addEventListener("click", () => {
+    menu.querySelector("[data-action='add-workspace']")?.addEventListener("click", () => {
       closeGearMenu();
-      callbacks.onAddProject();
+      callbacks.onAddWorkspace();
     });
 
     menu.querySelector("[data-action='toggle-theme']")?.addEventListener("click", () => {
@@ -219,47 +213,43 @@ export function renderSidebar(
     }, 0);
   });
 
-  // Restore scroll position
   const newTree = container.querySelector(".sidebar-tree");
   if (newTree) newTree.scrollTop = scrollTop;
 
-  // Project header click — toggle collapse
-  container.querySelectorAll(".project-group-header").forEach((header) => {
+  container.querySelectorAll(".workspace-group-header").forEach((header) => {
     header.addEventListener("click", () => {
-      const projectId = Number((header as HTMLElement).dataset.projectId);
-      if (collapsedProjects.has(projectId)) {
-        collapsedProjects.delete(projectId);
+      const workspaceId = Number((header as HTMLElement).dataset.workspaceId);
+      if (collapsedWorkspaces.has(workspaceId)) {
+        collapsedWorkspaces.delete(workspaceId);
       } else {
-        collapsedProjects.add(projectId);
+        collapsedWorkspaces.add(workspaceId);
       }
-      renderSidebar(container, projects, tasks, selectedTaskId, callbacks);
+      renderSidebar(container, workspaces, projects, selectedProjectId, callbacks);
     });
   });
 
-  // Per-project add task button
-  container.querySelectorAll(".project-add-task-btn").forEach((btn) => {
+  container.querySelectorAll(".workspace-add-project-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const projectId = Number((btn as HTMLElement).dataset.addTaskProjectId);
-      callbacks.onNewTaskForProject(projectId);
+      const workspaceId = Number((btn as HTMLElement).dataset.addProjectWorkspaceId);
+      callbacks.onNewProjectForWorkspace(workspaceId);
     });
   });
 
-  // Project header right-click — context menu
-  container.querySelectorAll(".project-group-header").forEach((header) => {
+  container.querySelectorAll(".workspace-group-header").forEach((header) => {
     header.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       closeContextMenu();
 
-      const projectId = Number((header as HTMLElement).dataset.projectId);
-      const project = projects.find((p) => p.id === projectId);
-      if (!project) return;
+      const workspaceId = Number((header as HTMLElement).dataset.workspaceId);
+      const workspace = workspaces.find((w) => w.id === workspaceId);
+      if (!workspace) return;
 
       const menu = document.createElement("div");
       menu.className = "context-menu";
       menu.innerHTML = `
         <button class="context-menu-item context-menu-item--danger" data-action="remove">
-          Remove "${escapeHtml(project.name)}"
+          Remove "${escapeHtml(workspace.name)}"
         </button>`;
 
       const mouseEvent = e as MouseEvent;
@@ -270,8 +260,8 @@ export function renderSidebar(
 
       menu.querySelector("[data-action='remove']")?.addEventListener("click", () => {
         closeContextMenu();
-        if (confirm(`Remove project "${project.name}"? Tasks will be preserved.`)) {
-          callbacks.onRemoveProject(projectId);
+        if (confirm(`Remove workspace "${workspace.name}"? Projects will be preserved.`)) {
+          callbacks.onRemoveWorkspace(workspaceId);
         }
       });
 
@@ -281,37 +271,35 @@ export function renderSidebar(
     });
   });
 
-  // Task archive button
-  container.querySelectorAll(".task-archive-btn").forEach((btn) => {
+  container.querySelectorAll(".project-archive-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const taskId = Number((btn as HTMLElement).dataset.archiveTaskId);
-      callbacks.onArchiveTask(taskId);
+      const projectId = Number((btn as HTMLElement).dataset.archiveProjectId);
+      callbacks.onArchiveProject(projectId);
     });
   });
 
-  // Task selection + click-to-rename on already-selected task name
-  container.querySelectorAll(".task-row").forEach((row) => {
+  container.querySelectorAll(".project-row").forEach((row) => {
     row.addEventListener("click", (e) => {
-      const taskId = Number((row as HTMLElement).dataset.taskId);
-      const clickedName = (e.target as HTMLElement).closest(".task-name");
-      if (clickedName && taskId === selectedTaskId) {
+      const projectId = Number((row as HTMLElement).dataset.projectId);
+      const clickedName = (e.target as HTMLElement).closest(".project-name");
+      if (clickedName && projectId === selectedProjectId) {
         e.stopPropagation();
-        startInlineRename(clickedName as HTMLElement, taskId, callbacks);
+        startInlineRename(clickedName as HTMLElement, projectId, callbacks);
         return;
       }
-      callbacks.onTaskSelect(taskId);
+      callbacks.onProjectSelect(projectId);
     });
   });
 }
 
-function startInlineRename(nameEl: HTMLElement, taskId: number, callbacks: SidebarCallbacks): void {
+function startInlineRename(nameEl: HTMLElement, projectId: number, callbacks: SidebarCallbacks): void {
   if (nameEl.tagName === "INPUT") return;
   const currentName = nameEl.textContent ?? "";
 
   const input = document.createElement("input");
   input.type = "text";
-  input.className = "task-name-input";
+  input.className = "project-name-input";
   input.value = currentName;
   nameEl.replaceWith(input);
   input.focus();
@@ -323,10 +311,10 @@ function startInlineRename(nameEl: HTMLElement, taskId: number, callbacks: Sideb
     committed = true;
     const newName = input.value.trim();
     if (newName && newName !== currentName) {
-      callbacks.onRenameTask(taskId, newName);
+      callbacks.onRenameProject(projectId, newName);
     } else {
       const span = document.createElement("span");
-      span.className = "task-name";
+      span.className = "project-name";
       span.textContent = currentName;
       input.replaceWith(span);
     }
@@ -340,7 +328,7 @@ function startInlineRename(nameEl: HTMLElement, taskId: number, callbacks: Sideb
       ke.preventDefault();
       committed = true;
       const span = document.createElement("span");
-      span.className = "task-name";
+      span.className = "project-name";
       span.textContent = currentName;
       input.replaceWith(span);
     }
@@ -349,9 +337,9 @@ function startInlineRename(nameEl: HTMLElement, taskId: number, callbacks: Sideb
   input.addEventListener("blur", commit);
 }
 
-export function triggerRenameSelected(container: HTMLElement, selectedTaskId: number | null, callbacks: SidebarCallbacks): void {
-  if (selectedTaskId === null) return;
-  const row = container.querySelector(`.task-row[data-task-id="${selectedTaskId}"]`);
-  const nameEl = row?.querySelector(".task-name") as HTMLElement | null;
-  if (nameEl) startInlineRename(nameEl, selectedTaskId, callbacks);
+export function triggerRenameSelected(container: HTMLElement, selectedProjectId: number | null, callbacks: SidebarCallbacks): void {
+  if (selectedProjectId === null) return;
+  const row = container.querySelector(`.project-row[data-project-id="${selectedProjectId}"]`);
+  const nameEl = row?.querySelector(".project-name") as HTMLElement | null;
+  if (nameEl) startInlineRename(nameEl, selectedProjectId, callbacks);
 }

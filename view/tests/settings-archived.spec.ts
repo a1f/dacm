@@ -14,47 +14,47 @@ test.describe("Archived Settings", () => {
     await expect(dacmPage.locator(".settings-page-title")).toHaveText("Archived");
   });
 
-  test("shows archived task from mock data", async ({ dacmPage }) => {
+  test("shows archived project from mock data", async ({ dacmPage }) => {
     await openArchivedSettings(dacmPage);
-    await expect(dacmPage.locator(".archived-task-name")).toContainText("Refactor legacy auth module");
+    await expect(dacmPage.locator(".archived-project-name")).toContainText("Refactor legacy auth module");
   });
 
-  test("archived task shows project name and date", async ({ dacmPage }) => {
+  test("archived project shows workspace name and date", async ({ dacmPage }) => {
     await openArchivedSettings(dacmPage);
-    await expect(dacmPage.locator(".archived-task-meta")).toContainText("web-app");
+    await expect(dacmPage.locator(".archived-project-meta")).toContainText("web-app");
   });
 
-  test("restore button is visible on archived task", async ({ dacmPage }) => {
+  test("restore button is visible on archived project", async ({ dacmPage }) => {
     await openArchivedSettings(dacmPage);
     await expect(dacmPage.locator("[data-action='restore']")).toBeVisible();
   });
 
-  test("delete button is visible on archived task", async ({ dacmPage }) => {
+  test("delete button is visible on archived project", async ({ dacmPage }) => {
     await openArchivedSettings(dacmPage);
     await expect(dacmPage.locator("[data-action='delete']")).toBeVisible();
   });
 
-  test("restore invokes update_task_status mock", async ({ dacmPage }) => {
+  test("restore invokes update_project_status mock", async ({ dacmPage }) => {
     await openArchivedSettings(dacmPage);
     await dacmPage.locator("[data-action='restore']").click();
 
-    // After restore, the task should no longer be archived in mock state
-    const task = await dacmPage.evaluate(() =>
-      (window as any).__MOCK_STATE__.tasks.find((t: any) => t.id === 6),
+    // After restore, the project should no longer be archived in mock state
+    const project = await dacmPage.evaluate(() =>
+      (window as any).__MOCK_STATE__.projects.find((t: any) => t.id === 6),
     );
-    expect(task.status).toBe("waiting");
+    expect(project.status).toBe("waiting");
   });
 
-  test("delete invokes delete_task mock after confirm", async ({ dacmPage }) => {
+  test("delete invokes delete_project mock after confirm", async ({ dacmPage }) => {
     await openArchivedSettings(dacmPage);
 
     dacmPage.on("dialog", (dialog) => dialog.accept());
     await dacmPage.locator("[data-action='delete']").click();
 
-    // After delete, task should be gone from mock state
-    const task = await dacmPage.evaluate(() =>
-      (window as any).__MOCK_STATE__.tasks.find((t: any) => t.id === 6),
+    // After delete, project should be gone from mock state
+    const project = await dacmPage.evaluate(() =>
+      (window as any).__MOCK_STATE__.projects.find((t: any) => t.id === 6),
     );
-    expect(task).toBeUndefined();
+    expect(project).toBeUndefined();
   });
 });

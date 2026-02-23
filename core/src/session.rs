@@ -8,8 +8,8 @@ use serde::Serialize;
 use crate::constants::DEFAULT_CLI;
 
 pub struct SessionHandle {
-    pub task_id: i32,
     pub project_id: i32,
+    pub workspace_id: i32,
     pub working_dir: String,
     pub pid: Option<u32>,
     pub started_at: std::time::Instant,
@@ -30,8 +30,8 @@ pub enum SessionStatus {
 #[derive(Serialize, Clone, Debug)]
 pub struct SessionInfo {
     pub session_id: String,
-    pub task_id: i32,
     pub project_id: i32,
+    pub workspace_id: i32,
     pub pid: Option<u32>,
     pub uptime_secs: u64,
     pub started_at_epoch: u64,
@@ -52,8 +52,8 @@ impl SessionManager {
 
     pub fn spawn(
         &self,
-        task_id: i32,
         project_id: i32,
+        workspace_id: i32,
         working_dir: String,
         initial_prompt: Option<String>,
         cli_command: Option<String>,
@@ -112,8 +112,8 @@ impl SessionManager {
         let session_id = uuid::Uuid::new_v4().to_string();
 
         let handle = SessionHandle {
-            task_id,
             project_id,
+            workspace_id,
             working_dir,
             pid,
             started_at: std::time::Instant::now(),
@@ -258,8 +258,8 @@ impl SessionManager {
             .iter()
             .map(|(id, handle)| SessionInfo {
                 session_id: id.clone(),
-                task_id: handle.task_id,
                 project_id: handle.project_id,
+                workspace_id: handle.workspace_id,
                 pid: handle.pid,
                 uptime_secs: handle.started_at.elapsed().as_secs(),
                 started_at_epoch: handle.started_at_epoch,

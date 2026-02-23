@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
-import type { Project, Task, SessionInfo } from "../../src/types.ts";
+import type { Workspace, Project, SessionInfo } from "../../src/types.ts";
 import type { MockSetting } from "../../mocks/mock-data.ts";
 
 export interface MockData {
+  workspaces: Workspace[];
   projects: Project[];
-  tasks: Task[];
   sessions: SessionInfo[];
   settings?: MockSetting[];
 }
@@ -22,13 +22,13 @@ function buildInitScript(data: MockData): string {
 (function() {
   const _data = ${json};
 
-  // Mutable state so tests can add/modify tasks and settings
+  // Mutable state so tests can add/modify projects and settings
   const state = {
+    workspaces: _data.workspaces,
     projects: _data.projects,
-    tasks: _data.tasks,
     sessions: _data.sessions,
     settings: _data.settings || [],
-    nextTaskId: Math.max(0, ..._data.tasks.map(t => t.id)) + 1,
+    nextProjectId: Math.max(0, ..._data.projects.map(t => t.id)) + 1,
   };
 
   // Expose state for test assertions
@@ -83,23 +83,23 @@ function buildInitScript(data: MockData): string {
   // --- Command handlers ---
   function handleCommand(cmd, args) {
     switch (cmd) {
-      case "list_projects":
-        return state.projects;
+      case "list_workspaces":
+        return state.workspaces;
 
-      case "list_all_tasks":
-        return state.tasks.filter(t => t.status !== "archived");
+      case "list_all_projects":
+        return state.projects.filter(t => t.status !== "archived");
 
       case "list_sessions":
         return state.sessions;
 
-      case "create_task": {
-        const task = {
-          id: state.nextTaskId++,
+      case "create_project": {
+        const project = {
+          id: state.nextProjectId++,
           name: args.name || "Untitled",
           description: args.description || "",
           summary: "",
           task_id: null,
-          project_id: args.projectId,
+          workspace_id: args.workspaceId,
           status: "waiting",
           start_time: null,
           iteration_count: 0,
@@ -107,43 +107,43 @@ function buildInitScript(data: MockData): string {
           branch_name: null,
           created_at: new Date().toISOString(),
         };
-        state.tasks.push(task);
-        return task;
-      }
-
-      case "update_task_status": {
-        const task = state.tasks.find(t => t.id === args.taskId);
-        if (!task) throw new Error("Task not found: " + args.taskId);
-        task.status = args.status;
-        return { ...task };
-      }
-
-      case "archive_task": {
-        const task = state.tasks.find(t => t.id === args.taskId);
-        if (!task) throw new Error("Task not found: " + args.taskId);
-        task.status = "archived";
-        return { ...task };
-      }
-
-      case "add_project": {
-        const name = args.path.split("/").pop() || args.path;
-        const project = {
-          id: Math.max(0, ...state.projects.map(p => p.id)) + 1,
-          name,
-          path: args.path,
-          created_at: new Date().toISOString(),
-        };
         state.projects.push(project);
         return project;
       }
 
-      case "remove_project": {
-        state.projects = state.projects.filter(p => p.id !== args.id);
+      case "update_project_status": {
+        const project = state.projects.find(t => t.id === args.projectId);
+        if (!project) throw new Error("Project not found: " + args.projectId);
+        project.status = args.status;
+        return { ...project };
+      }
+
+      case "archive_project": {
+        const project = state.projects.find(t => t.id === args.projectId);
+        if (!project) throw new Error("Project not found: " + args.projectId);
+        project.status = "archived";
+        return { ...project };
+      }
+
+      case "add_workspace": {
+        const name = args.path.split("/").pop() || args.path;
+        const workspace = {
+          id: Math.max(0, ...state.workspaces.map(p => p.id)) + 1,
+          name,
+          path: args.path,
+          created_at: new Date().toISOString(),
+        };
+        state.workspaces.push(workspace);
+        return workspace;
+      }
+
+      case "remove_workspace": {
+        state.workspaces = state.workspaces.filter(p => p.id !== args.id);
         return null;
       }
 
       case "spawn_session":
-        return "mock-session-" + args.taskId;
+        return "mock-session-" + args.projectId;
 
       case "kill_session":
         return null;
@@ -157,7 +157,7 @@ function buildInitScript(data: MockData): string {
       case "start_session_stream":
         return null;
 
-      case "simulate_task":
+      case "simulate_project":
         return null;
 
       // Settings commands
@@ -179,11 +179,11 @@ function buildInitScript(data: MockData): string {
         return null;
       }
 
-      case "list_archived_tasks":
-        return state.tasks.filter(t => t.status === "archived");
+      case "list_archived_projects":
+        return state.projects.filter(t => t.status === "archived");
 
-      case "delete_task": {
-        state.tasks = state.tasks.filter(t => t.id !== args.taskId);
+      case "delete_project": {
+        state.projects = state.projects.filter(t => t.id !== args.projectId);
         return null;
       }
 

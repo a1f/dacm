@@ -7,8 +7,8 @@ use crate::session::SessionManager;
 #[tauri::command]
 pub fn spawn_session(
     session_mgr: State<'_, SessionManager>,
-    task_id: i32,
     project_id: i32,
+    workspace_id: i32,
     working_dir: String,
     initial_prompt: Option<String>,
     cli_command: Option<String>,
@@ -17,8 +17,8 @@ pub fn spawn_session(
     cols: Option<u16>,
 ) -> Result<String, String> {
     session_mgr.spawn(
-        task_id,
         project_id,
+        workspace_id,
         working_dir,
         initial_prompt,
         cli_command,

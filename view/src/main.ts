@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { renderSidebar, triggerRenameSelected } from "./sidebar.ts";
-import { renderTaskDetail, destroyTerminalForSession, detachActiveTerminal } from "./task-detail.ts";
+import { renderProjectDetail, destroyTerminalForSession, detachActiveTerminal } from "./project-detail.ts";
 import { renderToolbar } from "./toolbar.ts";
 import { clearStream, markStreamStarted, isSessionActive, hasReceivedOutput } from "./terminal.ts";
 import { renderDebugPanel } from "./debug-panel.ts";
@@ -13,38 +13,38 @@ import { renderWorktreeSettings } from "./settings-worktrees.ts";
 import { renderArchivedSettings } from "./settings-archived.ts";
 import { initTheme } from "./theme.ts";
 import { getSetting, setSetting } from "./settings-api.ts";
-import type { Project, Task, TaskStatus, TaskStatusChangedEvent, SessionInfo, SettingsPage } from "./types.ts";
+import type { Workspace, Project, ProjectStatus, ProjectStatusChangedEvent, SessionInfo, SettingsPage } from "./types.ts";
 import { DEFAULT_CLI, DEFAULT_MODEL_ID } from "./constants.ts";
 import { findModel } from "./utils.ts";
 import "./style.css";
 
 interface AppState {
+  workspaces: Workspace[];
   projects: Project[];
-  tasks: Task[];
-  selectedTaskId: number | null;
   selectedProjectId: number | null;
+  selectedWorkspaceId: number | null;
   selectedModelId: string;
   autoSpawning: boolean;
-  activeSessions: Map<number, string>; // taskId -> sessionId
-  sessionUnlisteners: Map<number, () => void>; // taskId -> unlisten function
+  activeSessions: Map<number, string>; // projectId -> sessionId
+  sessionUnlisteners: Map<number, () => void>; // projectId -> unlisten function
   debugMode: boolean;
   sidebarCollapsed: boolean;
-  view: "tasks" | "settings";
+  view: "projects" | "settings";
   settingsPage: SettingsPage;
 }
 
 const state: AppState = {
+  workspaces: [],
   projects: [],
-  tasks: [],
-  selectedTaskId: null,
   selectedProjectId: null,
+  selectedWorkspaceId: null,
   selectedModelId: DEFAULT_MODEL_ID,
   autoSpawning: false,
   activeSessions: new Map(),
   sessionUnlisteners: new Map(),
   debugMode: false,
   sidebarCollapsed: false,
-  view: "tasks",
+  view: "projects",
   settingsPage: "general",
 };
 
@@ -66,14 +66,14 @@ const sidebarEl = document.querySelector<HTMLElement>("#sidebar")!;
 const mainContentEl = document.querySelector<HTMLElement>("#main-content")!;
 const sidebarToggleBtn = document.querySelector<HTMLElement>("#sidebar-toggle-btn")!;
 
-function getSelectedTask(): Task | null {
-  if (state.selectedTaskId === null) return null;
-  return state.tasks.find((t) => t.id === state.selectedTaskId) ?? null;
+function getSelectedProject(): Project | null {
+  if (state.selectedProjectId === null) return null;
+  return state.projects.find((p) => p.id === state.selectedProjectId) ?? null;
 }
 
-function getProjectPath(projectId: number): string | null {
-  const project = state.projects.find((p) => p.id === projectId);
-  return project?.path ?? null;
+function getWorkspacePath(workspaceId: number): string | null {
+  const workspace = state.workspaces.find((w) => w.id === workspaceId);
+  return workspace?.path ?? null;
 }
 
 function toggleSidebar(): void {
@@ -86,21 +86,19 @@ async function handleModelChange(modelId: string): Promise<void> {
   state.selectedModelId = modelId;
   setSetting("selected_model_id", modelId);
 
-  if (state.selectedTaskId !== null) {
-    const task = getSelectedTask();
-    if (task) {
-      const sessionId = state.activeSessions.get(task.id);
+  if (state.selectedProjectId !== null) {
+    const project = getSelectedProject();
+    if (project) {
+      const sessionId = state.activeSessions.get(project.id);
       if (sessionId) {
-        // Kill old session inline (skip status change to "waiting" — we're restarting)
         try { await invoke("kill_session", { sessionId }); } catch {}
-        const unlisten = state.sessionUnlisteners.get(task.id);
-        if (unlisten) { unlisten(); state.sessionUnlisteners.delete(task.id); }
+        const unlisten = state.sessionUnlisteners.get(project.id);
+        if (unlisten) { unlisten(); state.sessionUnlisteners.delete(project.id); }
         destroyTerminalForSession(sessionId);
-        state.activeSessions.delete(task.id);
+        state.activeSessions.delete(project.id);
         clearStream(sessionId);
       }
-      // Respawn session for the SAME task with new model (no intermediate render)
-      await spawnSessionForTask(task);
+      await spawnSessionForProject(project);
       render();
       return;
     }
@@ -108,50 +106,49 @@ async function handleModelChange(modelId: string): Promise<void> {
   render();
 }
 
-async function handleProjectChange(newProjectId: number): Promise<void> {
-  if (newProjectId === state.selectedProjectId && state.selectedTaskId !== null) return;
+async function handleWorkspaceChange(newWorkspaceId: number): Promise<void> {
+  if (newWorkspaceId === state.selectedWorkspaceId && state.selectedProjectId !== null) return;
 
   state.autoSpawning = false;
-  if (state.selectedTaskId !== null) {
-    await killSessionForTask(state.selectedTaskId);
+  if (state.selectedProjectId !== null) {
+    await killSessionForProject(state.selectedProjectId);
   }
-  state.selectedProjectId = newProjectId;
+  state.selectedWorkspaceId = newWorkspaceId;
 
-  // Select the most recent running task in the target project, or the most recent task overall
-  const projectTasks = state.tasks.filter((t) => t.project_id === newProjectId);
-  const running = projectTasks.find((t) => t.status === "running");
-  const best = running ?? projectTasks[0] ?? null;
-  state.selectedTaskId = best?.id ?? null;
+  const workspaceProjects = state.projects.filter((p) => p.workspace_id === newWorkspaceId);
+  const running = workspaceProjects.find((p) => p.status === "running");
+  const best = running ?? workspaceProjects[0] ?? null;
+  state.selectedProjectId = best?.id ?? null;
 
-  setSetting("last_project_id", String(newProjectId));
+  setSetting("last_workspace_id", String(newWorkspaceId));
   render();
 }
 
-async function autoSpawnNewTask(projectId: number): Promise<void> {
+async function autoSpawnNewProject(workspaceId: number): Promise<void> {
   if (state.autoSpawning) return;
 
   state.autoSpawning = true;
-  state.selectedProjectId = projectId;
-  state.selectedTaskId = null;
-  render(); // shows "Starting session…"
+  state.selectedWorkspaceId = workspaceId;
+  state.selectedProjectId = null;
+  render();
 
   try {
     const now = new Date();
     const name = `Chat ${now.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 
-    const newTask = await invoke<Task>("create_task", {
-      projectId,
+    const newProject = await invoke<Project>("create_project", {
+      workspaceId,
       name,
       description: "",
     });
     if (!state.autoSpawning) return;
-    state.tasks.push(newTask);
-    state.selectedTaskId = newTask.id;
-    state.selectedProjectId = projectId;
-    setSetting("last_task_id", String(newTask.id));
+    state.projects.push(newProject);
+    state.selectedProjectId = newProject.id;
+    state.selectedWorkspaceId = workspaceId;
+    setSetting("last_project_id", String(newProject.id));
     render();
     if (!state.autoSpawning) return;
-    await spawnSessionForTask(newTask);
+    await spawnSessionForProject(newProject);
     render();
   } catch (e) {
     console.error("Failed to auto-spawn session:", e);
@@ -160,8 +157,8 @@ async function autoSpawnNewTask(projectId: number): Promise<void> {
   }
 }
 
-async function spawnSessionForTask(task: Task): Promise<void> {
-  const path = getProjectPath(task.project_id);
+async function spawnSessionForProject(project: Project): Promise<void> {
+  const path = getWorkspacePath(project.workspace_id);
   if (!path) return;
 
   try {
@@ -169,54 +166,51 @@ async function spawnSessionForTask(task: Task): Promise<void> {
     const cliCommand = model?.interface ?? DEFAULT_CLI;
 
     const sessionId = await invoke<string>("spawn_session", {
-      taskId: task.id,
-      projectId: task.project_id,
+      projectId: project.id,
+      workspaceId: project.workspace_id,
       workingDir: path,
-      initialPrompt: task.description || null,
+      initialPrompt: project.description || null,
       cliCommand,
       model: state.selectedModelId,
     });
-    state.activeSessions.set(task.id, sessionId);
+    state.activeSessions.set(project.id, sessionId);
 
-    // When this session exits, clean up and archive the task
     const unlisten = await listen<void>(`session-exit-${sessionId}`, async () => {
-      // Deregister this listener
-      const unsub = state.sessionUnlisteners.get(task.id);
-      if (unsub) { unsub(); state.sessionUnlisteners.delete(task.id); }
+      const unsub = state.sessionUnlisteners.get(project.id);
+      if (unsub) { unsub(); state.sessionUnlisteners.delete(project.id); }
 
-      // Destroy terminal to free xterm.js memory
       destroyTerminalForSession(sessionId);
-      state.activeSessions.delete(task.id);
+      state.activeSessions.delete(project.id);
       clearStream(sessionId);
 
       try {
-        await invoke<Task>("archive_task", { taskId: task.id });
+        await invoke<Project>("archive_project", { projectId: project.id });
       } catch (_e) {
-        // Task may have been archived already
+        // Project may have been archived already
       }
-      state.tasks = state.tasks.filter((t) => t.id !== task.id);
-      if (state.selectedTaskId === task.id) {
-        const siblings = state.tasks.filter((t) => t.project_id === task.project_id);
-        state.selectedTaskId = siblings[0]?.id ?? null;
+      state.projects = state.projects.filter((p) => p.id !== project.id);
+      if (state.selectedProjectId === project.id) {
+        const siblings = state.projects.filter((p) => p.workspace_id === project.workspace_id);
+        state.selectedProjectId = siblings[0]?.id ?? null;
       }
       render();
     });
-    state.sessionUnlisteners.set(task.id, unlisten);
+    state.sessionUnlisteners.set(project.id, unlisten);
 
-    if (task.status !== "running") {
-      const updated = await invoke<Task>("update_task_status", {
-        taskId: task.id,
+    if (project.status !== "running") {
+      const updated = await invoke<Project>("update_project_status", {
+        projectId: project.id,
         status: "running",
       });
-      state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+      state.projects = state.projects.map((p) => (p.id === updated.id ? updated : p));
     }
   } catch (e) {
     console.error("Failed to spawn session:", e);
   }
 }
 
-async function killSessionForTask(taskId: number): Promise<void> {
-  const sessionId = state.activeSessions.get(taskId);
+async function killSessionForProject(projectId: number): Promise<void> {
+  const sessionId = state.activeSessions.get(projectId);
   if (!sessionId) return;
 
   try {
@@ -225,37 +219,35 @@ async function killSessionForTask(taskId: number): Promise<void> {
     console.error("Failed to kill session:", e);
   }
 
-  // Clean up the exit listener
-  const unlisten = state.sessionUnlisteners.get(taskId);
+  const unlisten = state.sessionUnlisteners.get(projectId);
   if (unlisten) {
     unlisten();
-    state.sessionUnlisteners.delete(taskId);
+    state.sessionUnlisteners.delete(projectId);
   }
 
   destroyTerminalForSession(sessionId);
-  state.activeSessions.delete(taskId);
+  state.activeSessions.delete(projectId);
   clearStream(sessionId);
 
-  // Archive the task so it disappears from the sidebar and debug panel
-  const archivedProjectId = state.tasks.find((t) => t.id === taskId)?.project_id;
+  const archivedWorkspaceId = state.projects.find((p) => p.id === projectId)?.workspace_id;
   try {
-    await invoke<Task>("archive_task", { taskId });
+    await invoke<Project>("archive_project", { projectId });
   } catch (e) {
-    console.error("Failed to archive task:", e);
+    console.error("Failed to archive project:", e);
   }
-  state.tasks = state.tasks.filter((t) => t.id !== taskId);
-  if (state.selectedTaskId === taskId) {
-    const siblings = archivedProjectId
-      ? state.tasks.filter((t) => t.project_id === archivedProjectId)
+  state.projects = state.projects.filter((p) => p.id !== projectId);
+  if (state.selectedProjectId === projectId) {
+    const siblings = archivedWorkspaceId
+      ? state.projects.filter((p) => p.workspace_id === archivedWorkspaceId)
       : [];
-    state.selectedTaskId = siblings[0]?.id ?? null;
+    state.selectedProjectId = siblings[0]?.id ?? null;
   }
 }
 
 function renderSettingsView(): void {
   renderSettingsNav(sidebarEl, state.settingsPage, {
     onBack() {
-      state.view = "tasks";
+      state.view = "projects";
       render();
     },
     onPageSelect(page: SettingsPage) {
@@ -283,22 +275,22 @@ function renderSettingsView(): void {
       renderWorktreeSettings(mainContentEl);
       break;
     case "archived":
-      renderArchivedSettings(mainContentEl, state.projects, {
-        async onRestore(taskId: number) {
+      renderArchivedSettings(mainContentEl, state.workspaces, {
+        async onRestore(projectId: number) {
           try {
-            const updated = await invoke<Task>("update_task_status", { taskId, status: "waiting" });
-            state.tasks.push(updated);
+            const updated = await invoke<Project>("update_project_status", { projectId, status: "waiting" });
+            state.projects.push(updated);
             render();
           } catch (e) {
-            console.error("Failed to restore task:", e);
+            console.error("Failed to restore project:", e);
           }
         },
-        async onDelete(taskId: number) {
+        async onDelete(projectId: number) {
           try {
-            await invoke("delete_task", { taskId });
+            await invoke("delete_project", { projectId });
             render();
           } catch (e) {
-            console.error("Failed to delete task:", e);
+            console.error("Failed to delete project:", e);
           }
         },
       });
@@ -308,69 +300,68 @@ function renderSettingsView(): void {
 
 function getSidebarCallbacks(): import("./sidebar.ts").SidebarCallbacks {
   return {
-    onTaskSelect(taskId: number) {
-      state.selectedTaskId = taskId;
+    onProjectSelect(projectId: number) {
+      state.selectedProjectId = projectId;
       state.debugMode = false;
-      setSetting("last_task_id", String(taskId));
+      setSetting("last_project_id", String(projectId));
       render();
     },
-    async onRenameTask(taskId: number, name: string) {
+    async onRenameProject(projectId: number, name: string) {
       try {
-        const updated = await invoke<Task>("rename_task", { taskId, name });
-        state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+        const updated = await invoke<Project>("rename_project", { projectId, name });
+        state.projects = state.projects.map((p) => (p.id === updated.id ? updated : p));
         render();
       } catch (e) {
-        console.error("Failed to rename task:", e);
+        console.error("Failed to rename project:", e);
       }
     },
     async onNewThread() {
       state.debugMode = false;
-      const projectId = state.selectedProjectId ?? state.projects[0]?.id;
-      if (projectId) {
-        await autoSpawnNewTask(projectId);
+      const workspaceId = state.selectedWorkspaceId ?? state.workspaces[0]?.id;
+      if (workspaceId) {
+        await autoSpawnNewProject(workspaceId);
       }
     },
-    async onNewTaskForProject(projectId: number) {
-      if (state.selectedTaskId !== null && projectId !== state.selectedProjectId) {
-        await killSessionForTask(state.selectedTaskId);
+    async onNewProjectForWorkspace(workspaceId: number) {
+      if (state.selectedProjectId !== null && workspaceId !== state.selectedWorkspaceId) {
+        await killSessionForProject(state.selectedProjectId);
       }
       state.debugMode = false;
-      setSetting("last_project_id", String(projectId));
-      await autoSpawnNewTask(projectId);
+      setSetting("last_workspace_id", String(workspaceId));
+      await autoSpawnNewProject(workspaceId);
     },
-    async onAddProject() {
+    async onAddWorkspace() {
       try {
         const selected = await open({ directory: true, multiple: false });
         if (!selected) return;
-        await invoke("add_project", { path: selected });
+        await invoke("add_workspace", { path: selected });
         await refresh();
       } catch (e) {
-        console.error("Failed to add project:", e);
+        console.error("Failed to add workspace:", e);
       }
     },
-    async onArchiveTask(taskId: number) {
+    async onArchiveProject(projectId: number) {
       try {
-        await invoke<Task>("archive_task", { taskId });
-        const unlisten = state.sessionUnlisteners.get(taskId);
-        if (unlisten) { unlisten(); state.sessionUnlisteners.delete(taskId); }
-        const sessionId = state.activeSessions.get(taskId);
+        await invoke<Project>("archive_project", { projectId });
+        const unlisten = state.sessionUnlisteners.get(projectId);
+        if (unlisten) { unlisten(); state.sessionUnlisteners.delete(projectId); }
+        const sessionId = state.activeSessions.get(projectId);
         if (sessionId) {
           destroyTerminalForSession(sessionId);
           clearStream(sessionId);
         }
-        state.activeSessions.delete(taskId);
-        const archivedProjectId = state.tasks.find((t) => t.id === taskId)?.project_id;
-        state.tasks = state.tasks.filter((t) => t.id !== taskId);
-        if (state.selectedTaskId === taskId) {
-          // Select next task in same project, or null
-          const siblings = archivedProjectId
-            ? state.tasks.filter((t) => t.project_id === archivedProjectId)
+        state.activeSessions.delete(projectId);
+        const archivedWorkspaceId = state.projects.find((p) => p.id === projectId)?.workspace_id;
+        state.projects = state.projects.filter((p) => p.id !== projectId);
+        if (state.selectedProjectId === projectId) {
+          const siblings = archivedWorkspaceId
+            ? state.projects.filter((p) => p.workspace_id === archivedWorkspaceId)
             : [];
-          state.selectedTaskId = siblings[0]?.id ?? null;
+          state.selectedProjectId = siblings[0]?.id ?? null;
         }
         render();
       } catch (e) {
-        console.error("Failed to archive task:", e);
+        console.error("Failed to archive project:", e);
       }
     },
     onToggleSidebar() {
@@ -381,24 +372,24 @@ function getSidebarCallbacks(): import("./sidebar.ts").SidebarCallbacks {
       state.debugMode = false;
       render();
     },
-    async onRemoveProject(projectId: number) {
+    async onRemoveWorkspace(workspaceId: number) {
       try {
-        await invoke("remove_project", { id: projectId });
-        state.tasks = state.tasks.filter((t) => t.project_id !== projectId);
-        if (state.selectedTaskId !== null) {
-          const selected = state.tasks.find((t) => t.id === state.selectedTaskId);
-          if (!selected) state.selectedTaskId = null;
+        await invoke("remove_workspace", { id: workspaceId });
+        state.projects = state.projects.filter((p) => p.workspace_id !== workspaceId);
+        if (state.selectedProjectId !== null) {
+          const selected = state.projects.find((p) => p.id === state.selectedProjectId);
+          if (!selected) state.selectedProjectId = null;
         }
         await refresh();
       } catch (e) {
-        console.error("Failed to remove project:", e);
+        console.error("Failed to remove workspace:", e);
       }
     },
   };
 }
 
 function refreshSidebar(): void {
-  renderSidebar(sidebarEl, state.projects, state.tasks, state.selectedTaskId, getSidebarCallbacks());
+  renderSidebar(sidebarEl, state.workspaces, state.projects, state.selectedProjectId, getSidebarCallbacks());
 }
 
 function render() {
@@ -412,26 +403,26 @@ function render() {
   if (state.debugMode) {
     mainContentEl.classList.remove("terminal-mode");
     detachActiveTerminal(mainContentEl);
-    renderDebugPanel(mainContentEl, state.tasks, {
+    renderDebugPanel(mainContentEl, state.projects, {
       onClose() {
         state.debugMode = false;
         render();
       },
-      onGoToTask(taskId: number) {
-        state.selectedTaskId = taskId;
+      onGoToProject(projectId: number) {
+        state.selectedProjectId = projectId;
         state.debugMode = false;
         render();
       },
       async onKillSession(sessionId: string) {
-        let targetTaskId: number | null = null;
-        for (const [taskId, sid] of state.activeSessions) {
+        let targetProjectId: number | null = null;
+        for (const [projectId, sid] of state.activeSessions) {
           if (sid === sessionId) {
-            targetTaskId = taskId;
+            targetProjectId = projectId;
             break;
           }
         }
-        if (targetTaskId !== null) {
-          await killSessionForTask(targetTaskId);
+        if (targetProjectId !== null) {
+          await killSessionForProject(targetProjectId);
         }
         render();
       },
@@ -439,59 +430,57 @@ function render() {
     return;
   }
 
-  const task = getSelectedTask();
+  const project = getSelectedProject();
 
-  if (!task) {
+  if (!project) {
     detachActiveTerminal(mainContentEl);
     mainContentEl.classList.add("terminal-mode");
 
-    // No projects — prompt user to add one
-    if (state.projects.length === 0) {
+    if (state.workspaces.length === 0) {
       mainContentEl.innerHTML = `
         <div class="session-header" data-tauri-drag-region></div>
         <div class="no-session-body">
           <div class="no-session-message">
-            <span class="no-session-label">No projects configured</span>
-            <button class="btn btn-restart" id="btn-add-project">Add a project</button>
+            <span class="no-session-label">No workspaces configured</span>
+            <button class="btn btn-restart" id="btn-add-workspace">Add a workspace</button>
           </div>
         </div>`;
-      mainContentEl.querySelector("#btn-add-project")?.addEventListener("click", async () => {
+      mainContentEl.querySelector("#btn-add-workspace")?.addEventListener("click", async () => {
         try {
           const selected = await open({ directory: true, multiple: false });
           if (!selected) return;
-          await invoke("add_project", { path: selected });
+          await invoke("add_workspace", { path: selected });
           await refresh();
         } catch (e) {
-          console.error("Failed to add project:", e);
+          console.error("Failed to add workspace:", e);
         }
       });
       renderToolbar(mainContentEl, {
         selectedModelId: state.selectedModelId,
-        selectedProject: null,
-        projects: [],
+        selectedWorkspace: null,
+        workspaces: [],
         branchName: null,
       }, {
         async onModelChange(modelId: string) {
           await handleModelChange(modelId);
         },
-        async onProjectChange() {},
-        async onAddProject() {
+        async onWorkspaceChange() {},
+        async onAddWorkspace() {
           try {
             const selected = await open({ directory: true, multiple: false });
             if (!selected) return;
-            await invoke("add_project", { path: selected });
+            await invoke("add_workspace", { path: selected });
             await refresh();
           } catch (e) {
-            console.error("Failed to add project:", e);
+            console.error("Failed to add workspace:", e);
           }
         },
       });
       return;
     }
 
-    // Currently auto-spawning — show loading state
     if (state.autoSpawning) {
-      const selectedProject = state.projects.find((p) => p.id === state.selectedProjectId) ?? null;
+      const selectedWorkspace = state.workspaces.find((w) => w.id === state.selectedWorkspaceId) ?? null;
       mainContentEl.innerHTML = `
         <div class="session-header" data-tauri-drag-region>
           <span class="session-header-title">Starting session\u2026</span>
@@ -503,33 +492,32 @@ function render() {
         </div>`;
       renderToolbar(mainContentEl, {
         selectedModelId: state.selectedModelId,
-        selectedProject,
-        projects: state.projects,
+        selectedWorkspace,
+        workspaces: state.workspaces,
         branchName: null,
       }, {
         async onModelChange(modelId: string) {
           await handleModelChange(modelId);
         },
-        async onProjectChange(newProjectId: number) {
-          await handleProjectChange(newProjectId);
+        async onWorkspaceChange(newWorkspaceId: number) {
+          await handleWorkspaceChange(newWorkspaceId);
         },
-        async onAddProject() {
+        async onAddWorkspace() {
           try {
             const selected = await open({ directory: true, multiple: false });
             if (!selected) return;
-            await invoke("add_project", { path: selected });
+            await invoke("add_workspace", { path: selected });
             await refresh();
           } catch (e) {
-            console.error("Failed to add project:", e);
+            console.error("Failed to add workspace:", e);
           }
         },
       });
       return;
     }
 
-    // No task selected — show empty state (no auto-spawn)
-    const projectId = state.selectedProjectId ?? state.projects[0]?.id;
-    const selectedProject = projectId ? state.projects.find((p) => p.id === projectId) ?? null : null;
+    const workspaceId = state.selectedWorkspaceId ?? state.workspaces[0]?.id;
+    const selectedWorkspace = workspaceId ? state.workspaces.find((w) => w.id === workspaceId) ?? null : null;
     mainContentEl.innerHTML = `
       <div class="session-header" data-tauri-drag-region></div>
       <div class="no-session-body">
@@ -539,119 +527,119 @@ function render() {
         </div>
       </div>`;
     mainContentEl.querySelector("#btn-new-session")?.addEventListener("click", async () => {
-      const pid = state.selectedProjectId ?? state.projects[0]?.id;
-      if (pid) await autoSpawnNewTask(pid);
+      const wid = state.selectedWorkspaceId ?? state.workspaces[0]?.id;
+      if (wid) await autoSpawnNewProject(wid);
     });
     renderToolbar(mainContentEl, {
       selectedModelId: state.selectedModelId,
-      selectedProject,
-      projects: state.projects,
+      selectedWorkspace,
+      workspaces: state.workspaces,
       branchName: null,
     }, {
       async onModelChange(modelId: string) {
         await handleModelChange(modelId);
       },
-      async onProjectChange(newProjectId: number) {
-        await handleProjectChange(newProjectId);
+      async onWorkspaceChange(newWorkspaceId: number) {
+        await handleWorkspaceChange(newWorkspaceId);
       },
-      async onAddProject() {
+      async onAddWorkspace() {
         try {
           const selected = await open({ directory: true, multiple: false });
           if (!selected) return;
-          await invoke("add_project", { path: selected });
+          await invoke("add_workspace", { path: selected });
           await refresh();
         } catch (e) {
-          console.error("Failed to add project:", e);
+          console.error("Failed to add workspace:", e);
         }
       },
     });
     return;
   }
 
-  const activeSessionId = state.activeSessions.get(task.id) ?? null;
-  const selectedProject = state.projects.find((p) => p.id === task.project_id) ?? null;
+  const activeSessionId = state.activeSessions.get(project.id) ?? null;
+  const selectedWorkspace = state.workspaces.find((w) => w.id === project.workspace_id) ?? null;
   const toolbarProps = {
     selectedModelId: state.selectedModelId,
-    selectedProject,
-    projects: state.projects,
-    branchName: task.branch_name,
+    selectedWorkspace,
+    workspaces: state.workspaces,
+    branchName: project.branch_name,
   };
 
-  renderTaskDetail(mainContentEl, task, activeSessionId, toolbarProps, {
-    async onStatusChange(taskId: number, status: TaskStatus) {
+  renderProjectDetail(mainContentEl, project, activeSessionId, toolbarProps, {
+    async onStatusChange(projectId: number, status: ProjectStatus) {
       try {
-        const updated = await invoke<Task>("update_task_status", { taskId, status });
-        state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+        const updated = await invoke<Project>("update_project_status", { projectId, status });
+        state.projects = state.projects.map((p) => (p.id === updated.id ? updated : p));
         render();
       } catch (e) {
         console.error("Failed to update status:", e);
       }
     },
-    async onSimulate(taskId: number) {
+    async onSimulate(projectId: number) {
       try {
-        await invoke("simulate_task", { taskId });
+        await invoke("simulate_project", { projectId });
       } catch (e) {
         console.error("Failed to start simulation:", e);
       }
     },
-    async onArchive(taskId: number) {
+    async onArchive(projectId: number) {
       try {
-        await invoke<Task>("archive_task", { taskId });
-        const unlisten = state.sessionUnlisteners.get(taskId);
+        await invoke<Project>("archive_project", { projectId });
+        const unlisten = state.sessionUnlisteners.get(projectId);
         if (unlisten) {
           unlisten();
-          state.sessionUnlisteners.delete(taskId);
+          state.sessionUnlisteners.delete(projectId);
         }
-        const sessionId = state.activeSessions.get(taskId);
+        const sessionId = state.activeSessions.get(projectId);
         if (sessionId) {
           destroyTerminalForSession(sessionId);
           clearStream(sessionId);
         }
-        state.activeSessions.delete(taskId);
-        const archivedProjectId = state.tasks.find((t) => t.id === taskId)?.project_id;
-        state.tasks = state.tasks.filter((t) => t.id !== taskId);
-        if (state.selectedTaskId === taskId) {
-          const siblings = archivedProjectId
-            ? state.tasks.filter((t) => t.project_id === archivedProjectId)
+        state.activeSessions.delete(projectId);
+        const archivedWorkspaceId = state.projects.find((p) => p.id === projectId)?.workspace_id;
+        state.projects = state.projects.filter((p) => p.id !== projectId);
+        if (state.selectedProjectId === projectId) {
+          const siblings = archivedWorkspaceId
+            ? state.projects.filter((p) => p.workspace_id === archivedWorkspaceId)
             : [];
-          state.selectedTaskId = siblings[0]?.id ?? null;
+          state.selectedProjectId = siblings[0]?.id ?? null;
         }
         render();
       } catch (e) {
-        console.error("Failed to archive task:", e);
+        console.error("Failed to archive project:", e);
       }
     },
-    async onKillSession(taskId: number) {
-      await killSessionForTask(taskId);
+    async onKillSession(projectId: number) {
+      await killSessionForProject(projectId);
       render();
     },
-    async onRestartSession(taskId: number) {
-      const oldSessionId = state.activeSessions.get(taskId);
+    async onRestartSession(projectId: number) {
+      const oldSessionId = state.activeSessions.get(projectId);
       if (oldSessionId) {
         destroyTerminalForSession(oldSessionId);
-        state.activeSessions.delete(taskId);
+        state.activeSessions.delete(projectId);
         clearStream(oldSessionId);
       }
-      const t = state.tasks.find((t) => t.id === taskId);
-      if (t) {
-        await spawnSessionForTask(t);
+      const p = state.projects.find((p) => p.id === projectId);
+      if (p) {
+        await spawnSessionForProject(p);
         render();
       }
     },
     async onModelChange(modelId: string) {
       await handleModelChange(modelId);
     },
-    async onProjectChange(projectId: number) {
-      await handleProjectChange(projectId);
+    async onWorkspaceChange(workspaceId: number) {
+      await handleWorkspaceChange(workspaceId);
     },
-    async onAddProject() {
+    async onAddWorkspace() {
       try {
         const selected = await open({ directory: true, multiple: false });
         if (!selected) return;
-        await invoke("add_project", { path: selected });
+        await invoke("add_workspace", { path: selected });
         await refresh();
       } catch (e) {
-        console.error("Failed to add project:", e);
+        console.error("Failed to add workspace:", e);
       }
     },
   });
@@ -670,34 +658,33 @@ async function loadCodeFontSettings(): Promise<void> {
 
 async function refresh() {
   try {
-    const [projects, tasks, sessions] = await Promise.all([
-      invoke<Project[]>("list_projects"),
-      invoke<Task[]>("list_all_tasks"),
+    const [workspaces, projects, sessions] = await Promise.all([
+      invoke<Workspace[]>("list_workspaces"),
+      invoke<Project[]>("list_all_projects"),
       invoke<SessionInfo[]>("list_sessions"),
     ]);
+    state.workspaces = workspaces;
     state.projects = projects;
-    state.tasks = tasks;
 
-    const runningSessionTaskIds = new Set(
-      sessions.filter((s) => s.status === "running").map((s) => s.task_id),
+    const runningSessionProjectIds = new Set(
+      sessions.filter((s) => s.status === "running").map((s) => s.project_id),
     );
 
     for (const s of sessions) {
-      if (s.status === "running" && !state.activeSessions.has(s.task_id)) {
-        state.activeSessions.set(s.task_id, s.session_id);
+      if (s.status === "running" && !state.activeSessions.has(s.project_id)) {
+        state.activeSessions.set(s.project_id, s.session_id);
         markStreamStarted(s.session_id);
       }
     }
 
-    // Reconcile stale "running" tasks: if no backend session exists, mark completed
-    for (const task of state.tasks) {
-      if (task.status === "running" && !runningSessionTaskIds.has(task.id)) {
+    for (const project of state.projects) {
+      if (project.status === "running" && !runningSessionProjectIds.has(project.id)) {
         try {
-          const updated = await invoke<Task>("update_task_status", {
-            taskId: task.id,
+          const updated = await invoke<Project>("update_project_status", {
+            projectId: project.id,
             status: "completed",
           });
-          state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+          state.projects = state.projects.map((p) => (p.id === updated.id ? updated : p));
         } catch { /* ignore */ }
       }
     }
@@ -708,19 +695,17 @@ async function refresh() {
   }
 }
 
-listen<TaskStatusChangedEvent>("task-status-changed", (event) => {
-  const { task_id, status } = event.payload;
-  state.tasks = state.tasks.map((t) =>
-    t.id === task_id ? { ...t, status } : t,
+listen<ProjectStatusChangedEvent>("project-status-changed", (event) => {
+  const { project_id, status } = event.payload;
+  state.projects = state.projects.map((p) =>
+    p.id === project_id ? { ...p, status } : p,
   );
   render();
 });
 
-// Centralized keyboard shortcuts — skip when terminal is focused
 document.addEventListener("keydown", (e) => {
   const inTerminal = document.activeElement?.closest(".terminal-container") !== null;
 
-  // Ctrl+Shift+D — debug panel (always active)
   if (e.ctrlKey && e.shiftKey && e.key === "D") {
     e.preventDefault();
     state.debugMode = !state.debugMode;
@@ -728,7 +713,6 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  // Ctrl+Shift+P — performance overlay (always active)
   if (e.ctrlKey && e.shiftKey && e.key === "P") {
     e.preventDefault();
     togglePerfOverlay();
@@ -737,28 +721,24 @@ document.addEventListener("keydown", (e) => {
 
   const mod = e.metaKey || e.ctrlKey;
 
-  // Cmd+E — rename selected task (always active)
   if (mod && e.key === "e") {
     e.preventDefault();
-    triggerRenameSelected(sidebarEl, state.selectedTaskId, getSidebarCallbacks());
+    triggerRenameSelected(sidebarEl, state.selectedProjectId, getSidebarCallbacks());
     return;
   }
 
-  // Skip remaining shortcuts when terminal has focus
   if (inTerminal) return;
 
-  // Cmd+B — toggle sidebar
   if (mod && e.key === "b") {
     e.preventDefault();
     toggleSidebar();
     return;
   }
 
-  // Cmd+, — toggle settings
   if (mod && e.key === ",") {
     e.preventDefault();
     if (state.view === "settings") {
-      state.view = "tasks";
+      state.view = "projects";
     } else {
       state.view = "settings";
       state.debugMode = false;
@@ -767,23 +747,21 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  // Cmd+N — new session
   if (mod && e.key === "n") {
     e.preventDefault();
     state.debugMode = false;
     if (state.view === "settings") {
-      state.view = "tasks";
+      state.view = "projects";
     }
-    const pid = state.selectedProjectId ?? state.projects[0]?.id;
-    if (pid) autoSpawnNewTask(pid);
+    const wid = state.selectedWorkspaceId ?? state.workspaces[0]?.id;
+    if (wid) autoSpawnNewProject(wid);
     return;
   }
 
-  // Escape — close settings, deselect task, or close debug
   if (e.key === "Escape") {
     if (state.view === "settings") {
       e.preventDefault();
-      state.view = "tasks";
+      state.view = "projects";
       render();
       return;
     }
@@ -793,26 +771,25 @@ document.addEventListener("keydown", (e) => {
       render();
       return;
     }
-    if (state.selectedTaskId !== null) {
+    if (state.selectedProjectId !== null) {
       e.preventDefault();
-      state.selectedTaskId = null;
+      state.selectedProjectId = null;
       render();
       return;
     }
   }
 });
 
-// Sidebar toggle button click
 sidebarToggleBtn.addEventListener("click", toggleSidebar);
 
 async function loadPersistedState(): Promise<void> {
   try {
-    const projectId = await getSetting("last_project_id");
-    const id = Number(projectId);
-    if (state.projects.some((p) => p.id === id)) {
-      state.selectedProjectId = id;
+    const workspaceId = await getSetting("last_workspace_id");
+    const id = Number(workspaceId);
+    if (state.workspaces.some((w) => w.id === id)) {
+      state.selectedWorkspaceId = id;
     }
-  } catch { /* no persisted project */ }
+  } catch { /* no persisted workspace */ }
 
   try {
     const modelId = await getSetting("selected_model_id");
@@ -822,42 +799,38 @@ async function loadPersistedState(): Promise<void> {
   } catch { /* no persisted model */ }
 
   try {
-    const taskId = await getSetting("last_task_id");
-    const id = Number(taskId);
-    if (state.tasks.some((t) => t.id === id)) {
-      state.selectedTaskId = id;
+    const projectId = await getSetting("last_project_id");
+    const id = Number(projectId);
+    if (state.projects.some((p) => p.id === id)) {
+      state.selectedProjectId = id;
     }
-  } catch { /* no persisted task */ }
+  } catch { /* no persisted project */ }
 
-  if (state.selectedProjectId === null && state.projects.length > 0) {
-    state.selectedProjectId = state.projects[0].id;
+  if (state.selectedWorkspaceId === null && state.workspaces.length > 0) {
+    state.selectedWorkspaceId = state.workspaces[0].id;
   }
 }
 
-// Idle detection: mark running tasks as completed when PTY output stops,
-// and mark them running again when output resumes.
 const IDLE_THRESHOLD_MS = 5000;
 setInterval(() => {
-  for (const [taskId, sessionId] of state.activeSessions) {
-    const task = state.tasks.find((t) => t.id === taskId);
-    if (!task) continue;
+  for (const [projectId, sessionId] of state.activeSessions) {
+    const project = state.projects.find((p) => p.id === projectId);
+    if (!project) continue;
 
     const active = isSessionActive(sessionId, IDLE_THRESHOLD_MS);
     const received = hasReceivedOutput(sessionId);
 
-    if (task.status === "running" && !active && received) {
-      // Idle for 5s after receiving output — mark completed
-      invoke<Task>("update_task_status", { taskId, status: "completed" })
+    if (project.status === "running" && !active && received) {
+      invoke<Project>("update_project_status", { projectId, status: "completed" })
         .then((updated) => {
-          state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+          state.projects = state.projects.map((p) => (p.id === updated.id ? updated : p));
           refreshSidebar();
         })
         .catch(() => {});
-    } else if (task.status === "completed" && active) {
-      // Output resumed — mark running
-      invoke<Task>("update_task_status", { taskId, status: "running" })
+    } else if (project.status === "completed" && active) {
+      invoke<Project>("update_project_status", { projectId, status: "running" })
         .then((updated) => {
-          state.tasks = state.tasks.map((t) => (t.id === updated.id ? updated : t));
+          state.projects = state.projects.map((p) => (p.id === updated.id ? updated : p));
           refreshSidebar();
         })
         .catch(() => {});
@@ -870,20 +843,19 @@ async function init(): Promise<void> {
   await Promise.all([refresh(), loadCodeFontSettings()]);
   await loadPersistedState();
 
-  if (state.selectedTaskId === null && state.projects.length > 0) {
-    const projectId = state.selectedProjectId ?? state.projects[0].id;
+  if (state.selectedProjectId === null && state.workspaces.length > 0) {
+    const workspaceId = state.selectedWorkspaceId ?? state.workspaces[0].id;
 
-    // Prefer selecting an existing task (handles page reload / HMR)
-    const projectTasks = state.tasks.filter((t) => t.project_id === projectId);
-    const running = projectTasks.find((t) => t.status === "running");
-    const best = running ?? projectTasks[0] ?? null;
+    const workspaceProjects = state.projects.filter((p) => p.workspace_id === workspaceId);
+    const running = workspaceProjects.find((p) => p.status === "running");
+    const best = running ?? workspaceProjects[0] ?? null;
 
     if (best) {
-      state.selectedTaskId = best.id;
-      setSetting("last_task_id", String(best.id));
+      state.selectedProjectId = best.id;
+      setSetting("last_project_id", String(best.id));
       render();
     } else {
-      await autoSpawnNewTask(projectId);
+      await autoSpawnNewProject(workspaceId);
     }
   } else {
     render();

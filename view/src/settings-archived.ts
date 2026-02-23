@@ -1,43 +1,43 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Project, Task } from "./types.ts";
+import type { Workspace, Project } from "./types.ts";
 import { escapeHtml } from "./utils.ts";
 
 export interface ArchivedSettingsCallbacks {
-  onRestore: (taskId: number) => void;
-  onDelete: (taskId: number) => void;
+  onRestore: (projectId: number) => void;
+  onDelete: (projectId: number) => void;
 }
 
 export async function renderArchivedSettings(
   container: HTMLElement,
-  projects: Project[],
+  workspaces: Workspace[],
   callbacks: ArchivedSettingsCallbacks,
 ): Promise<void> {
-  let archivedTasks: Task[];
+  let archivedProjects: Project[];
   try {
-    archivedTasks = await invoke<Task[]>("list_archived_tasks");
+    archivedProjects = await invoke<Project[]>("list_archived_projects");
   } catch {
-    archivedTasks = [];
+    archivedProjects = [];
   }
 
-  const projectMap = new Map(projects.map((p) => [p.id, p]));
+  const workspaceMap = new Map(workspaces.map((w) => [w.id, w]));
 
   const listHtml =
-    archivedTasks.length === 0
-      ? `<p class="archived-empty">No archived tasks.</p>`
-      : archivedTasks
-          .map((task) => {
-            const project = projectMap.get(task.project_id);
-            const projectName = project ? escapeHtml(project.name) : "Unknown";
-            const date = new Date(task.created_at).toLocaleDateString();
+    archivedProjects.length === 0
+      ? `<p class="archived-empty">No archived projects.</p>`
+      : archivedProjects
+          .map((project) => {
+            const workspace = workspaceMap.get(project.workspace_id);
+            const workspaceName = workspace ? escapeHtml(workspace.name) : "Unknown";
+            const date = new Date(project.created_at).toLocaleDateString();
             return `
-              <div class="archived-task-row" data-task-id="${task.id}">
-                <div class="archived-task-info">
-                  <div class="archived-task-name">${escapeHtml(task.name)}</div>
-                  <div class="archived-task-meta">${projectName} &middot; ${date}</div>
+              <div class="archived-project-row" data-project-id="${project.id}">
+                <div class="archived-project-info">
+                  <div class="archived-project-name">${escapeHtml(project.name)}</div>
+                  <div class="archived-project-meta">${workspaceName} &middot; ${date}</div>
                 </div>
-                <div class="archived-task-actions">
-                  <button class="btn" data-action="restore" data-task-id="${task.id}">Restore</button>
-                  <button class="btn btn-archive" data-action="delete" data-task-id="${task.id}">Delete</button>
+                <div class="archived-project-actions">
+                  <button class="btn" data-action="restore" data-project-id="${project.id}">Restore</button>
+                  <button class="btn btn-archive" data-action="delete" data-project-id="${project.id}">Delete</button>
                 </div>
               </div>`;
           })
@@ -46,23 +46,23 @@ export async function renderArchivedSettings(
   container.innerHTML = `
     <div class="settings-page">
       <h2 class="settings-page-title">Archived</h2>
-      <div class="archived-task-list">
+      <div class="archived-project-list">
         ${listHtml}
       </div>
     </div>`;
 
   container.querySelectorAll("[data-action='restore']").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const taskId = Number((btn as HTMLElement).dataset.taskId);
-      callbacks.onRestore(taskId);
+      const projectId = Number((btn as HTMLElement).dataset.projectId);
+      callbacks.onRestore(projectId);
     });
   });
 
   container.querySelectorAll("[data-action='delete']").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const taskId = Number((btn as HTMLElement).dataset.taskId);
-      if (confirm("Permanently delete this task?")) {
-        callbacks.onDelete(taskId);
+      const projectId = Number((btn as HTMLElement).dataset.projectId);
+      if (confirm("Permanently delete this project?")) {
+        callbacks.onDelete(projectId);
       }
     });
   });

@@ -1,17 +1,17 @@
-import type { Task, TaskStatus } from "./types.ts";
+import type { Project, ProjectStatus } from "./types.ts";
 import { createTerminalSession, type TerminalSession } from "./terminal.ts";
 import { escapeHtml } from "./utils.ts";
 import { renderToolbar, type ToolbarProps } from "./toolbar.ts";
 
-export interface TaskDetailCallbacks {
-  onStatusChange: (taskId: number, status: TaskStatus) => void;
-  onSimulate: (taskId: number) => void;
-  onArchive: (taskId: number) => void;
-  onKillSession: (taskId: number) => void;
-  onRestartSession: (taskId: number) => void;
+export interface ProjectDetailCallbacks {
+  onStatusChange: (projectId: number, status: ProjectStatus) => void;
+  onSimulate: (projectId: number) => void;
+  onArchive: (projectId: number) => void;
+  onKillSession: (projectId: number) => void;
+  onRestartSession: (projectId: number) => void;
   onModelChange: (modelId: string) => void;
-  onProjectChange: (projectId: number) => void;
-  onAddProject: () => void;
+  onWorkspaceChange: (workspaceId: number) => void;
+  onAddWorkspace: () => void;
 }
 
 interface CachedTerminal {
@@ -28,9 +28,9 @@ function statusBadgeHtml(status: string): string {
 
 function renderSessionHeader(
   container: HTMLElement,
-  task: Task,
+  project: Project,
   isRunning: boolean,
-  callbacks: TaskDetailCallbacks,
+  callbacks: ProjectDetailCallbacks,
 ): void {
   const headerActions = isRunning
     ? `<button class="btn btn-kill" id="btn-kill-session">Kill</button>`
@@ -41,32 +41,32 @@ function renderSessionHeader(
 
   container.innerHTML = `
     <div class="session-header" data-tauri-drag-region>
-      <span class="session-header-title">${escapeHtml(task.name)} ${statusBadgeHtml(task.status)}</span>
+      <span class="session-header-title">${escapeHtml(project.name)} ${statusBadgeHtml(project.status)}</span>
       ${headerActions}
     </div>`;
 
   if (isRunning) {
     container.querySelector("#btn-kill-session")?.addEventListener("click", () => {
-      callbacks.onKillSession(task.id);
+      callbacks.onKillSession(project.id);
     });
   } else {
     container.querySelector("#btn-archive")?.addEventListener("click", () => {
-      callbacks.onArchive(task.id);
+      callbacks.onArchive(project.id);
     });
     container.querySelector("#btn-restart")?.addEventListener("click", () => {
-      callbacks.onRestartSession(task.id);
+      callbacks.onRestartSession(project.id);
     });
   }
 }
 
 function swapToExitedHeader(
   container: HTMLElement,
-  task: Task,
-  callbacks: TaskDetailCallbacks,
+  project: Project,
+  callbacks: ProjectDetailCallbacks,
 ): void {
   const headerTitle = container.querySelector(".session-header-title");
   if (headerTitle) {
-    headerTitle.innerHTML = `${escapeHtml(task.name)} ${statusBadgeHtml("completed")}`;
+    headerTitle.innerHTML = `${escapeHtml(project.name)} ${statusBadgeHtml("completed")}`;
   }
   const killBtn = container.querySelector("#btn-kill-session");
   if (killBtn) {
@@ -76,34 +76,33 @@ function swapToExitedHeader(
       <button class="btn btn-session-action" id="btn-archive">Archive</button>
       <button class="btn btn-restart" id="btn-restart">Restart Session</button>`;
     killBtn.replaceWith(actionsDiv);
-    actionsDiv.querySelector("#btn-archive")?.addEventListener("click", () => callbacks.onArchive(task.id));
-    actionsDiv.querySelector("#btn-restart")?.addEventListener("click", () => callbacks.onRestartSession(task.id));
+    actionsDiv.querySelector("#btn-archive")?.addEventListener("click", () => callbacks.onArchive(project.id));
+    actionsDiv.querySelector("#btn-restart")?.addEventListener("click", () => callbacks.onRestartSession(project.id));
   }
 }
 
-function renderToolbarFromCallbacks(container: HTMLElement, toolbarProps: ToolbarProps, callbacks: TaskDetailCallbacks): void {
+function renderToolbarFromCallbacks(container: HTMLElement, toolbarProps: ToolbarProps, callbacks: ProjectDetailCallbacks): void {
   renderToolbar(container, toolbarProps, {
     onModelChange: callbacks.onModelChange,
-    onProjectChange: callbacks.onProjectChange,
-    onAddProject: callbacks.onAddProject,
+    onWorkspaceChange: callbacks.onWorkspaceChange,
+    onAddWorkspace: callbacks.onAddWorkspace,
   });
 }
 
 function renderTerminalView(
   container: HTMLElement,
-  task: Task,
+  project: Project,
   sessionId: string,
   toolbarProps: ToolbarProps,
-  callbacks: TaskDetailCallbacks,
+  callbacks: ProjectDetailCallbacks,
 ): void {
   if (activeTerminalSessionId === sessionId) return;
 
-  // Detach current terminal wrapper (keep it alive in cache)
   detachCurrentTerminal(container);
 
-  const isRunning = task.status === "running";
+  const isRunning = project.status === "running";
   container.classList.add("terminal-mode");
-  renderSessionHeader(container, task, isRunning, callbacks);
+  renderSessionHeader(container, project, isRunning, callbacks);
 
   activeTerminalSessionId = sessionId;
 
@@ -125,7 +124,7 @@ function renderTerminalView(
   renderToolbarFromCallbacks(container, toolbarProps, callbacks);
 
   createTerminalSession(wrapper, sessionId, () => {
-    swapToExitedHeader(container, task, callbacks);
+    swapToExitedHeader(container, project, callbacks);
   }).then((session) => {
     terminalCache.set(sessionId, { session, wrapper });
     session.terminal.focus();
@@ -146,14 +145,14 @@ function detachCurrentTerminal(container: HTMLElement): void {
 
 function renderNoSessionView(
   container: HTMLElement,
-  task: Task,
+  project: Project,
   toolbarProps: ToolbarProps,
-  callbacks: TaskDetailCallbacks,
+  callbacks: ProjectDetailCallbacks,
 ): void {
   container.classList.add("terminal-mode");
   container.innerHTML = `
     <div class="session-header" data-tauri-drag-region>
-      <span class="session-header-title">${escapeHtml(task.name)} ${statusBadgeHtml(task.status)}</span>
+      <span class="session-header-title">${escapeHtml(project.name)} ${statusBadgeHtml(project.status)}</span>
       <div class="session-header-actions">
         <button class="btn btn-session-action" id="btn-archive">Archive</button>
       </div>
@@ -168,28 +167,28 @@ function renderNoSessionView(
   renderToolbarFromCallbacks(container, toolbarProps, callbacks);
 
   container.querySelector("#btn-restart")?.addEventListener("click", () => {
-    callbacks.onRestartSession(task.id);
+    callbacks.onRestartSession(project.id);
   });
 
   container.querySelector("#btn-archive")?.addEventListener("click", () => {
-    callbacks.onArchive(task.id);
+    callbacks.onArchive(project.id);
   });
 }
 
-export function renderTaskDetail(
+export function renderProjectDetail(
   container: HTMLElement,
-  task: Task,
+  project: Project,
   activeSessionId: string | null,
   toolbarProps: ToolbarProps,
-  callbacks: TaskDetailCallbacks,
+  callbacks: ProjectDetailCallbacks,
 ): void {
   if (activeSessionId) {
-    renderTerminalView(container, task, activeSessionId, toolbarProps, callbacks);
+    renderTerminalView(container, project, activeSessionId, toolbarProps, callbacks);
     return;
   }
 
   detachCurrentTerminal(container);
-  renderNoSessionView(container, task, toolbarProps, callbacks);
+  renderNoSessionView(container, project, toolbarProps, callbacks);
 }
 
 export function detachActiveTerminal(container: HTMLElement): void {

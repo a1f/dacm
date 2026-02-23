@@ -36,10 +36,10 @@ test.describe("Layout", () => {
 
     // Need to inject mocks before navigating
     const { injectTauriMock } = await import("./mocks/tauri-mock.ts");
-    const { mockProjects, mockTasks } = await import("../mocks/mock-data.ts");
-    await injectTauriMock(page, { projects: mockProjects, tasks: mockTasks, sessions: [] });
+    const { mockWorkspaces, mockProjects } = await import("../mocks/mock-data.ts");
+    await injectTauriMock(page, { workspaces: mockWorkspaces, projects: mockProjects, sessions: [] });
     await page.goto("/");
-    await page.waitForSelector(".project-group", { timeout: 5000 });
+    await page.waitForSelector(".workspace-group", { timeout: 5000 });
 
     expect(errors).toEqual([]);
   });

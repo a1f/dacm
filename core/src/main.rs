@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod commands;
+mod workspace_commands;
 mod constants;
 mod db;
 mod models;
@@ -11,8 +11,8 @@ mod settings_commands;
 mod system_commands;
 mod settings_models;
 mod sleep_commands;
-mod task_commands;
-mod task_models;
+mod project_commands;
+mod project_models;
 
 use tauri::{Manager, RunEvent};
 
@@ -35,16 +35,16 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::add_project,
-            commands::remove_project,
-            commands::list_projects,
-            task_commands::create_task,
-            task_commands::update_task_status,
-            task_commands::rename_task,
-            task_commands::archive_task,
-            task_commands::list_tasks_by_project,
-            task_commands::list_all_tasks,
-            task_commands::simulate_task,
+            workspace_commands::add_workspace,
+            workspace_commands::remove_workspace,
+            workspace_commands::list_workspaces,
+            project_commands::create_project,
+            project_commands::update_project_status,
+            project_commands::rename_project,
+            project_commands::archive_project,
+            project_commands::list_projects_by_workspace,
+            project_commands::list_all_projects,
+            project_commands::simulate_project,
             session_commands::spawn_session,
             session_commands::write_to_session,
             session_commands::resize_session,
@@ -55,8 +55,8 @@ fn main() {
             settings_commands::set_setting,
             settings_commands::list_settings,
             sleep_commands::set_prevent_sleep,
-            task_commands::list_archived_tasks,
-            task_commands::delete_task,
+            project_commands::list_archived_projects,
+            project_commands::delete_project,
             system_commands::get_system_stats,
         ])
         .build(tauri::generate_context!())
